@@ -1,0 +1,289 @@
+#!/usr/bin/python3
+import yaml
+import argparse
+import os
+import pwd
+import json
+import sys
+import subprocess
+import shutil
+import logging
+import openpyxl
+import csv
+#from PIL import Image
+import io
+import pandas as pd
+from pgmagick import Image as MagickImage
+
+# import from functions.py
+from functions import *
+
+def value_exists_in_column(df, column_name, value):
+    """
+    Checks if a value exists in a column in a Pandas DataFrame.
+
+    Args:
+        df (pd.DataFrame): Pandas DataFrame to search in.
+        column_name (str): Name of the column to search in.
+        value: Value to search for.
+
+    Returns:
+        bool: True if the value exists, False otherwise.
+    """
+
+    try:
+        # Check if the column exists in the DataFrame
+        if column_name not in df.columns:
+            return False
+            #raise ValueError(f"The column '{column_name}' does not exist in the DataFrame")
+
+        # Check if the value exists in the column
+        return value in df[column_name].values
+
+    except Exception as e:
+        #print(f"An unexpected error occurred: {e}")
+        return False
+
+def scan_directory(directory):
+    """
+    Recursively scan a directory and return a list of files and subdirectories.
+    
+    Args:
+        directory (str): Path to the directory to scan.
+    
+    Returns:
+        list: List of tuples containing file/subdirectory name, type, and path.
+    """
+    result = []
+    for item in os.listdir(directory):
+        item_path = os.path.join(directory, item)
+        if os.path.isfile(item_path):
+            result.append((item, "File", item_path))
+        elif os.path.isdir(item_path):
+            result.append((item, "Directory", item_path))
+            result.extend(scan_directory(item_path))  # Recursive call
+    return result
+
+
+def read_csv(csv_file):
+    """
+    Read a csv file.
+
+    Args:
+        csv_file (str): Path to a CSV file.
+
+    Returns:
+        data frame (df): A Pandas data frame.
+    """
+    try:
+        df = pd.read_csv(csv_file)
+    except FileNotFoundError:
+        print(f"Error: The file '{csv_file}' was not found.")
+    except pd.errors.EmptyDataError:
+        print(f"Error: The file '{csv_file}' is empty.")
+    except pd.errors.ParserError as e:
+        print(f"Error: An error occurred while parsing the file '{csv_file}' - {e}.")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+    return df
+
+
+def write_csv(df,csv_file):
+    """
+    Write a csv file.
+
+    Args:
+        df (Pandas data frame): Dataframe containing the data to write out.
+        csv_file (str): A full path to the resulting CSV file.
+    """
+    try:
+        df.to_csv(csv_file, index=False)
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+
+def update_csv(df,update_column,condition_column,condition_value,new_value):
+    """
+    Updates a column field in a pandas dataframe based on another column field.
+
+    Args:
+        df (pandas dataframe): pandas dataframe
+        update_column (str): Name of the column to update.
+        condition_column (str): Name of the column to check the condition
+        condition_value (str): Value to check in the condition column.
+        new_value (str): New value to update in the update column.
+
+    Returns:
+        None
+    """
+
+    #print(f"Updating: {condition_column}:{condition_value} field {update_column} with {new_value}")
+
+    try:
+        if update_column not in df.columns or condition_column not in df.columns:
+            print(f"Error: {update_column} does not exist in the CSV.")
+            #raise ValueError("Invalid column name")
+
+        if condition_value not in df[condition_column].values:
+            print(f"Error: {condition_column}:{condition_value} does not exist in CSV.")
+            #raise ValueError("Condition value not found is not in the manifest.csv")
+
+        df.loc[df[condition_column] == condition_value, update_column] = new_value
+
+    except ValueError as e:
+        print(f"Error: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+    
+
+def convert_tiff_to_jp2(tif_file_path, jp2_file_path):
+    """
+    Converts a tif file to a jp2 file using the 'gm convert' command.
+
+    Args:
+        tif_file_path (str): A full path the TIFF file.
+        jp2_file_path (str): A full path to the resulting JP2 file.
+    Returns:
+        None 
+    """
+    args = [
+        "/usr/bin/gm",
+        "convert",
+        "-define",
+        "jp2:numrlvls=6",
+        "-define",
+        "jp2:tilewidth=1024",
+        "-define",
+        "jp2:tileheight=1024",
+        "-define",
+        "jp2:rate=1.0",
+        "-define",
+        "jp2:lazy", 
+        "-define",
+        "jp2:prg=rlcp",
+        "-define",
+        "jp2:mode=int",
+        "-define", 
+        "jp2:ilyrrates='0.015625,0.01858,0.0221,0.025,0.03125,0.03716,0.04419,0.05,0.0625,0.075,0.088,0.1,0.125,0.15,0.18,0.21,0.25,0.3,0.35,0.4,0.5,0.6,0.7,0.84'",
+        tif_file_path,
+        jp2_file_path
+        ]
+
+    #print(f"Convert: {args}")
+    try:
+        result = subprocess.run(args, capture_output=True, text=True)
+    except Exception as e:
+        raise Exception(f"Failed to convert TIFF to JP2: {str(e)}")
+
+
+def validate_spreadsheet(csv_file):
+    required_columns = ['id','title','file','parent_id']
+
+    # Read the CSV file.
+    df = pd.read_csv(csv_file)
+
+    # Check for the columns.
+    for column_name in required_columns:
+        if not column_name in df.columns:
+            print(f"Required column {column_name} is missing in the CSV {csv_file} - adding it: {column_name}.")
+            # add the required column
+            if column_name == 'file':
+                df[column_name] = None
+
+    # Write the CSV file.
+    write_csv(df,csv_file) 
+
+
+def main(directory):
+    # Scan the directory and return a list of contents.
+    data = scan_directory(directory)
+
+    # Where is the manifest CSV - It should be here:
+    manifest_path = directory+'/manifest.csv'
+    
+    # Validate the manifest.csv file - it requires 'id','title' and 'file' columns.
+    validate_spreadsheet(manifest_path)
+
+    # Read the manifest file into df.
+    df = read_csv(manifest_path)
+
+    # Process each of the found files in the directory.
+    for row, (file_name, file_type, file_path) in enumerate(data, start=2):
+        # file_name = filename with extension but no path.
+        # file_type = File or Directory
+        # file_path = full path and filename with extension
+
+        # Ignore these files.
+        ignore = ['target.tif','manifest.csv','manifest.xlsx']
+
+        #print(f"Evaluating: {file_path}")
+        parent = file_path.replace(directory, "")
+        parent = parent.replace("/"+file_name, "")
+        parent = parent.replace("/","")
+        #print(f"  Parent: {parent}") 
+
+        # This is an Image.
+        if ( file_type == "File" ) and ( parent == "" ):
+
+            # Ignore these file_name's
+            if (( file_name == "target.tif" ) or ( file_name == "manifest.csv" ) or ( file_name == "manifest.xlsx" )):
+                next
+            else:
+                # Work on these file_names (Files):
+
+                # Create additional variables.
+                dir,ext = os.path.splitext(file_path)  # Split the file_path into directory and extension.
+                pid = os.path.basename(dir)            # Assign pid to the last piece of the directory.
+                jp2_path = dir+'.jp2'                  # Construct the jp2 file path based upon the original file path.
+
+                # If it's a .tif it gets converted to .jp2
+                if ( ext == ".tif" ):
+                    print(f"I Converting: {file_path} to jp2.")
+                    if not os.path.exists(jp2_path):
+                        convert_tiff_to_jp2(file_path, jp2_path)
+
+                # Update the manifest.csv file with the paths.
+                update_csv(df,'file','id',pid,jp2_path)
+
+        # This is a Manuscript.
+        if (file_type == "File" ) and ( parent != "" ):
+            dir,ext = os.path.splitext(file_path)
+            pid = os.path.basename(dir)
+            jp2_path = dir+'.jp2'
+            if ( ext == ".tif" ):
+                print(f"M Converting: {file_path} to jp2.")
+                if not os.path.exists(jp2_path):
+                    convert_tiff_to_jp2(file_path, jp2_path)
+
+            # Create entry in manifest.csv if it doesn't exist.
+            #if not value_exists_in_column(df,'id',parent):
+                # Create a row in manifest.csv.
+                # 'parent' = parent, 'file' = jp2_path
+                #print(f"M   Value does not exist in id column: {parent}/{pid}{ext}")
+            
+                #update_csv(df,'file','id',pid,jp2_path)
+
+        # This is a Directory.
+        if (file_type == "Directory" ):
+            print(f"D Directory: {file_path}")
+
+        # This is a directory.
+        #if ( file_type == "Directory" ):
+            #if ( file_name == "Other" ):
+            #    next
+            #else:
+                # Work on these file_names (Files):
+                #print(f"Working on directory: {file_name}")
+                
+                # See if {file_name} is listed in csv.
+                # if so, 
+                
+
+
+    # Write the updated manifest CSV file out.
+    write_csv(df,manifest_path)        
+
+if __name__ == "__main__":
+    directory = input("Enter the directory path: ")
+    main(directory)
+
+

@@ -18,6 +18,63 @@ from pgmagick import Image as MagickImage
 # import from functions.py
 from functions import *
 
+def get_username() -> str:
+    """
+    Retrieves the current logged-in user's username.
+
+    Returns:
+        str: The username of the current user.
+    """
+    return pwd.getpwuid(os.getuid())[0]
+
+def create_temp_dir_at_path(path: str) -> str:
+    """Creates a temporary directory at the specified path.
+
+    Args:
+        path: The path where the temporary directory should be created.
+
+    Returns:
+        The path to the created temporary directory.
+    """
+    temp_dir = tempfile.mkdtemp(dir=path)
+    return temp_dir
+
+def read_yaml_file(path: str) -> dict:
+    """
+    Reads a YAML file and returns its content as a dictionary.
+
+    Args:
+        path (str): The path to the YAML file.
+
+    Returns:
+        dict: The content of the YAML file.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        yaml.YAMLError: If there is an error parsing the YAML file.
+        ValueError: If the file content is not a valid dictionary.
+    """
+    try:
+        with open(path, "r") as stream:
+            data = yaml.safe_load(stream)
+            if not isinstance(data, dict):
+                raise ValueError(f"The file content is not a valid dictionary: {path}")
+            return data
+    except FileNotFoundError:
+        print(f"File not found: {path}. Please check the file path and try again.")
+        raise
+    except yaml.YAMLError:
+        print(f"Error parsing YAML file: {path}. Please ensure the file is properly formatted.")
+        raise
+    except ValueError:
+        print(f"Invalid content in YAML file: {path}.")
+        raise
+    except Exception as e:
+        print(f"An unexpected error occurred while reading the YAML file: {str(e)}")
+        raise e
+
+
+
 def value_exists_in_column(df, column_name, value):
     """
     Checks if a value exists in a column in a Pandas DataFrame.
@@ -192,22 +249,111 @@ def validate_spreadsheet(csv_file):
     # Write the CSV file.
     write_csv(df,csv_file) 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description='Migrate media from Islandora 7 to PeerTube.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+
+    # Required arguments
+    parser.add_argument('--config-file', dest="config_file", required=True, help='Path to the YAML configuration file.')
+)
+    parser.add_argument('--log-file', dest="log_file", required=True, help='Path to the log file.')
+    parser.add_argument('--directory', dest="directory", required=True, help='Path to the directory to scan.')
+
+    # Optional arguments
+    parser.add_argument('--in-google-sheet-id', dest="in_gs_id", help='Google Sheet ID related to the directory.')
+    parser.add_argument('--in-google-sheet-name', dest="in_gs_name", help='Google Sheet Tab Name.')
+    
+    # Parse Arguments
+    args = parser.parse_args()
+
+    return args
+
+def process_image():
+    # Images are kept at the top level folder.
+
+def process_objects():
+    # object files are kept within a folder of the top level folder.
+
+def process_directory():
+    # folders under the top level folder are considered object folders.
+
+
+def process_files(data):
+    # Begin Processing the listing of the directory.
+    logger.info(f"Processing file data.")
+
+    # Loop through the listing.
+    for row, (file_name, file_type, file_path) in enumerate(data, start=2):
+        print(f"Object: {file_path}")
+
+        # Define the parent
+        parent = file_path.replace(directory, "")
+        parent = parent.replace("/"+file_name, "")
+        parent = parent.replace("/","")
+
+        if ( file_type == "File" ) and ( parent == "" ):
+            # This is an Image.
+
+        if (file_type == "File" ) and ( parent != "" ):
+            # This is an Object.
+
+        if (file_type == "Directory" ):
+            # This is a Directory.
+            print(f"D Directory: {file_path}")         
+
+    
 
 def main(directory):
-    # Scan the directory and return a list of contents.
-    data = scan_directory(directory)
+    # Setup the log file format.
+    log_formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
+
+    # Parse command line arguements.
+    args = parse_arguments()
+
+    # Obtain the user running the script.
+    username            = get_username()
+
+    # Get the configuration file contents.
+    cfg                 = read_yaml_file(args.config_file)
+
+    # Set Google variables from config file.
+    google_credentials  = cfg['google_credentials_file']
+    google_sheet_id     = cfg['google_sheet_id']
+    google_sheet_name   = cfg['google_sheet_name']
+
+    # Create the Log file.
+    print(f"Creating log file: {args.log_file}")
+    logger = setup_logger('logger', args.log_file, level=logging.DEBUG, formatter=log_formatter)
+    logger.info(f"Begin log.")
+
+    # Connect to Google.
+
+    # Scan the directory and return a list of directory contents.
+    file_data = scan_directory(args.directory)
+
+    # Process the contents.
+    process_files(file_data)
+
+    # New Code here...
+
+
+
+    # ---------------------------------------------------------------
+    # OLD Code:...
 
     # Where is the manifest CSV - It should be here:
-    manifest_path = directory+'/manifest.csv'
+    #manifest_path = directory+'/manifest.csv'
     
     # Validate the manifest.csv file - it requires 'id','title' and 'file' columns.
-    validate_spreadsheet(manifest_path)
+    #validate_spreadsheet(manifest_path)
 
     # Read the manifest file into df.
-    df = read_csv(manifest_path)
+    #df = read_csv(manifest_path)
 
     # Process each of the found files in the directory.
-    for row, (file_name, file_type, file_path) in enumerate(data, start=2):
+    for row, (file_name, file_type, file_path) in enumerate(file_data, start=2):
         # file_name = filename with extension but no path.
         # file_type = File or Directory
         # file_path = full path and filename with extension
@@ -282,8 +428,11 @@ def main(directory):
     # Write the updated manifest CSV file out.
     write_csv(df,manifest_path)        
 
+    
+    # End Old Code.
+    # ---------------------------------------------------------------
+
 if __name__ == "__main__":
-    directory = input("Enter the directory path: ")
-    main(directory)
+    main()
 
 

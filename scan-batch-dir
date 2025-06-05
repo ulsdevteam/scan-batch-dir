@@ -10,13 +10,11 @@ import shutil
 import logging
 import openpyxl
 import csv
-#from PIL import Image
 import io
 import pandas as pd
-from pgmagick import Image as MagickImage
 
 # import from functions.py
-from functions import *
+#from functions import *
 
 def get_username() -> str:
     """
@@ -392,9 +390,10 @@ def convert_tiff_to_jp2(tif_file_path, jp2_file_path):
         jp2_file_path
         ]
 
-    #print(f"Convert: {args}")
     try:
         result = subprocess.run(args, capture_output=True, text=True)
+        if (result.returncode == 0):
+            logger.info(f"Successfully converted TIFF to JP2 on file: {tif_file_path}")
     except Exception as e:
         raise Exception(f"Failed to convert TIFF to JP2: {str(e)}")
 
@@ -426,7 +425,7 @@ def validate_spreadsheet(csv_file):
                 df[column_name] = None
 
     # Write the CSV file.
-    write_csv(df,csv_file) 
+    #write_csv(df,csv_file) 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -436,7 +435,6 @@ def parse_arguments():
 
     # Required arguments
     parser.add_argument('--config-file', dest="config_file", required=True, help='Path to the YAML configuration file.')
-)
     parser.add_argument('--log-file', dest="log_file", required=True, help='Path to the log file.')
     parser.add_argument('--directory', dest="directory", required=True, help='Path to the directory to scan.')
 
@@ -539,7 +537,7 @@ def process_files(data):
 
     
 
-def main(directory):
+def main():
     # Setup the log file format.
     log_formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
 
@@ -562,9 +560,21 @@ def main(directory):
     logger = setup_logger('logger', args.log_file, level=logging.DEBUG, formatter=log_formatter)
     logger.info(f"Begin log.")
 
+    # Get external command paths.
+    gm_path = shutil.which("gm")
+
+
+    if gm_path:
+        logger.info(f"GraphicsMagick Executable found at: {gm_path}")
+    else:
+        logger.error(f"GraphicsMagick Executable 'gm' not found and is required.")
+        print(f"GraphicsMagick Executable 'gm' not found and is required.")
+        print(f"Exiting...")
+        exit()
+
     # Connect to Google Sheets and read the Sheet to dataframe.
     print(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
-    df = read_google_sheet(google_sheet_id: str, google_sheet_name, google_credentials)
+    df = read_google_sheet(google_sheet_id, google_sheet_name, google_credentials)
     if (is_valid_dataframe(df)):
         
         # Scan the directory and return a list of directory contents.
@@ -576,6 +586,7 @@ def main(directory):
     else:
         logger.error(f"Google Sheet is invalid.")
         print(f"Google Sheet is invalid.")
+        exit()
 
 
 if __name__ == "__main__":

@@ -73,7 +73,174 @@ def read_yaml_file(path: str) -> dict:
         print(f"An unexpected error occurred while reading the YAML file: {str(e)}")
         raise e
 
+def connect_to_google_sheet(credentials_file: str):
+    """
+    Connects to the Google Sheets API using service account credentials.
 
+    Args:
+        credentials_file (str): Path to the Google service account credentials file.
+
+    Returns:
+        build: The Google Sheets API service object.
+    """
+    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+    CONFIG_FILE = credentials_file
+
+    if not os.path.exists(CONFIG_FILE):
+        raise Exception(f"Configuration file not found: {CONFIG_FILE}")
+
+    try:
+        creds = service_account.Credentials.from_service_account_file(
+            CONFIG_FILE,
+            scopes=SCOPES
+        )
+
+        service = build('sheets', 'v4', credentials=creds)
+        return service
+
+    except Exception as e:
+        raise Exception(f"Failed to create Google Sheets service: {str(e)}")
+
+def read_google_sheet(spreadsheet_id: str, sheet_name="Sheet1", credentials_file="configuration.json") -> pd.DataFrame:
+    """
+    Reads data from a Google Sheet into a pandas DataFrame.
+
+    Args:
+        spreadsheet_id (str): The ID of the Google Sheet.
+        sheet_name (str): The name of the sheet to read data from.
+        credentials_file (str): Path to the Google service account credentials file.
+
+    Returns:
+        pandas.DataFrame: The data from the Google Sheet.
+    """
+    try:
+        # Build the service
+        service = connect_to_google_sheet(credentials_file);
+
+        # Call the Sheets API
+        sheet = service.spreadsheets()
+        result = sheet.values().get(spreadsheetId=spreadsheet_id,
+                              range=sheet_name).execute()
+
+        # Get the values
+        values = result.get('values', [])
+
+        if not values:
+            print('No data found.')
+            return pd.DataFrame()
+
+        # Convert to DataFrame
+        # First row as headers, rest as data
+        headers = values[0]
+        data = values[1:] if len(values) > 1 else []
+
+        # Create DataFrame
+        df = pd.DataFrame(data, columns=headers)
+
+        return df
+
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        return pd.DataFrame()
+
+def update_google_sheet(df: pd.DataFrame, spreadsheet_id: str, sheet_name: str, credentials_file: str) -> tuple:
+    """
+    Updates a Google Sheet with data from a pandas DataFrame.
+
+    Args:
+        df (pandas.DataFrame): The DataFrame containing updated data.
+        spreadsheet_id (str): The ID of the Google Sheet.
+        sheet_name (str): The name of the sheet to update.
+        credentials_file (str): Path to the Google service account credentials file.
+
+    Returns:
+        tuple: Success status and message.
+    """
+    try:
+        # Validate inputs
+        if not isinstance(df, pd.DataFrame):
+            return False, "Input must be a pandas DataFrame"
+
+        if df.empty:
+            return False, "DataFrame is empty"
+
+        # Build the service
+        service = connect_to_google_sheet(credentials_file);
+
+        # Call the Sheets API
+        sheet = service.spreadsheets()
+
+        # Convert DataFrame to list of lists (including headers)
+        values = [df.columns.tolist()] + df.values.tolist()
+
+        # Prepare the body for the API request
+        body = {
+            'values': values
+        }
+
+        # Update the sheet with DataFrame contents
+        result = sheet.values().update(
+            spreadsheetId=spreadsheet_id,
+            range=f'{sheet_name}!A1',
+            valueInputOption='RAW',
+            body=body
+        ).execute()
+
+        updated_cells = result.get('updatedCells', 0)
+        return True, f"Successfully updated {updated_cells} cells"
+
+    except Exception as e:
+        return False, f"An error occurred: {str(e)}"
+
+def update_dataframe(df: pd.DataFrame, match_column: str, match_value, update_column: str, update_value):
+    """
+    Update a DataFrame by matching a value in a specified column and updating another column.
+
+    Parameters:
+    df (pandas.DataFrame): The input DataFrame
+    match_column (str): Name of the column to match on
+    match_value: Value to match in the match_column
+    update_column (str): Name of the column to update
+    update_value: Value to set in the update_column
+
+    Returns:
+    pandas.DataFrame: Updated DataFrame
+    boolean: True/False
+    str: Message
+    """
+    try:
+        # Verify input is a DataFrame
+        if not isinstance(df, pd.DataFrame):
+            return None, False, "Input must be a pandas DataFrame"
+
+        # Check if DataFrame is empty
+        if df.empty:
+            return df, False, "DataFrame is empty"
+
+        # Verify columns exist
+        if match_column not in df.columns:
+            return df, False, f"Match column '{match_column}' not found"
+        if update_column not in df.columns:
+            return df, False, f"Update column '{update_column}' not found"
+
+        # Create a copy to avoid modifying the original
+        updated_df = df.copy()
+
+        # Find rows to update
+        mask = updated_df[match_column].astype(str) == str(match_value)
+        if not mask.any():
+            return updated_df, False, f"No rows found matching '{match_value}' in '{match_column}'"
+
+        # Update the matching rows
+        updated_df.loc[mask, update_column] = update_value
+
+        # Count updated rows
+        updated_count = mask.sum()
+
+        return updated_df, True, f"Successfully updated {updated_count} row(s)"
+
+    except Exception as e:
+        return df, False, f"An error occurred: {str(e)}"
 
 def value_exists_in_column(df, column_name, value):
     """
@@ -231,6 +398,18 @@ def convert_tiff_to_jp2(tif_file_path, jp2_file_path):
     except Exception as e:
         raise Exception(f"Failed to convert TIFF to JP2: {str(e)}")
 
+def is_valid_dataframe(df: pd.DataFrame) -> bool:
+    """
+    Determines if a DataFrame is valid (not empty and of correct type).
+
+    Args:
+        df (pandas.DataFrame): The DataFrame to validate.
+
+    Returns:
+        bool: True if valid, False otherwise.
+    """
+    return isinstance(df, pd.DataFrame) and not df.empty
+
 
 def validate_spreadsheet(csv_file):
     required_columns = ['id','title','file','parent_id']
@@ -271,13 +450,55 @@ def parse_arguments():
     return args
 
 def process_image():
+    logger.info(f"Processing an image.")
     # Images are kept at the top level folder.
 
-def process_objects():
+    # Create additional variables.
+    dir,ext = os.path.splitext(file_path)  # Split the file_path into directory and extension.
+    pid = os.path.basename(dir)            # Assign pid to the last piece of the directory.
+    jp2_path = dir+'.jp2'                  # Construct the jp2 file path based upon the original file path.
+
+    # If it's a .tif it gets converted to .jp2
+    if ( ext == ".tif" ):
+        print(f"I Converting: {file_path} to jp2.")
+        if not os.path.exists(jp2_path):
+            convert_tiff_to_jp2(file_path, jp2_path)
+
+    # Update the sheet with the paths.
+    #update_csv(df,'file','id',pid,jp2_path)
+    #df,success,msg = update_dataframe(df, match_column, match_value, update_column, update_value)
+
+    logger.info(f"Processing an image - complete.")
+
+
+
+def process_object():
+    logger.info(f"Processing an object.")
     # object files are kept within a folder of the top level folder.
+
+    if (file_type == "File" ) and ( parent != "" ):
+        dir,ext = os.path.splitext(file_path)
+        pid = os.path.basename(dir)
+        jp2_path = dir+'.jp2'
+        if ( ext == ".tif" ):
+            print(f"M Converting: {file_path} to jp2.")
+            if not os.path.exists(jp2_path):
+                convert_tiff_to_jp2(file_path, jp2_path)
+
+    # Update the sheet.
+    #df,success,msg = update_dataframe(df, match_column, match_value, update_column, update_value)
+
+    logger.info(f"Processing an object - complete.")
+
 
 def process_directory():
     # folders under the top level folder are considered object folders.
+    logger.info(f"Processing a subdirectory.")
+
+    # Update the sheet.
+    #df,success,msg = update_dataframe(df, match_column, match_value, update_column, update_value)
+
+    logger.info(f"Processing a subdirectory - complete.")
 
 
 def process_files(data):
@@ -286,22 +507,35 @@ def process_files(data):
 
     # Loop through the listing.
     for row, (file_name, file_type, file_path) in enumerate(data, start=2):
-        print(f"Object: {file_path}")
+        print(f"Inspecting: {file_path}")
 
-        # Define the parent
-        parent = file_path.replace(directory, "")
-        parent = parent.replace("/"+file_name, "")
-        parent = parent.replace("/","")
+        # Skip things we don't want to include.
+        if (( file_name == "target.tif" ) or ( file_name == "manifest.csv" ) or ( file_name == "manifest.xlsx" )):
+            next
+        else:
+            # Define the parent
+            parent = file_path.replace(directory, "")
+            parent = parent.replace("/"+file_name, "")
+            parent = parent.replace("/","")
 
-        if ( file_type == "File" ) and ( parent == "" ):
-            # This is an Image.
+            if ( file_type == "File" ) and ( parent == "" ):
+                # This is an Image.
+                print(f"Image: {file_path}")
+                process_image()
 
-        if (file_type == "File" ) and ( parent != "" ):
-            # This is an Object.
+            if (file_type == "File" ) and ( parent != "" ):
+                # This is an Object.
+                print(f"Object: {file_path}")
+                process_object()
 
-        if (file_type == "Directory" ):
-            # This is a Directory.
-            print(f"D Directory: {file_path}")         
+            if (file_type == "Directory" ):
+                # This is a Directory.
+                print(f"Directory: {file_path}")
+                process_directory()
+
+    # Write the Sheet.
+    #write_csv(df,manifest_path)
+
 
     
 
@@ -328,109 +562,21 @@ def main(directory):
     logger = setup_logger('logger', args.log_file, level=logging.DEBUG, formatter=log_formatter)
     logger.info(f"Begin log.")
 
-    # Connect to Google.
+    # Connect to Google Sheets and read the Sheet to dataframe.
+    print(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
+    df = read_google_sheet(google_sheet_id: str, google_sheet_name, google_credentials)
+    if (is_valid_dataframe(df)):
+        
+        # Scan the directory and return a list of directory contents.
+        file_data = scan_directory(args.directory)
 
-    # Scan the directory and return a list of directory contents.
-    file_data = scan_directory(args.directory)
+        # Process the contents.
+        process_files(file_data)
 
-    # Process the contents.
-    process_files(file_data)
+    else:
+        logger.error(f"Google Sheet is invalid.")
+        print(f"Google Sheet is invalid.")
 
-    # New Code here...
-
-
-
-    # ---------------------------------------------------------------
-    # OLD Code:...
-
-    # Where is the manifest CSV - It should be here:
-    #manifest_path = directory+'/manifest.csv'
-    
-    # Validate the manifest.csv file - it requires 'id','title' and 'file' columns.
-    #validate_spreadsheet(manifest_path)
-
-    # Read the manifest file into df.
-    #df = read_csv(manifest_path)
-
-    # Process each of the found files in the directory.
-    for row, (file_name, file_type, file_path) in enumerate(file_data, start=2):
-        # file_name = filename with extension but no path.
-        # file_type = File or Directory
-        # file_path = full path and filename with extension
-
-        # Ignore these files.
-        ignore = ['target.tif','manifest.csv','manifest.xlsx']
-
-        #print(f"Evaluating: {file_path}")
-        parent = file_path.replace(directory, "")
-        parent = parent.replace("/"+file_name, "")
-        parent = parent.replace("/","")
-        #print(f"  Parent: {parent}") 
-
-        # This is an Image.
-        if ( file_type == "File" ) and ( parent == "" ):
-
-            # Ignore these file_name's
-            if (( file_name == "target.tif" ) or ( file_name == "manifest.csv" ) or ( file_name == "manifest.xlsx" )):
-                next
-            else:
-                # Work on these file_names (Files):
-
-                # Create additional variables.
-                dir,ext = os.path.splitext(file_path)  # Split the file_path into directory and extension.
-                pid = os.path.basename(dir)            # Assign pid to the last piece of the directory.
-                jp2_path = dir+'.jp2'                  # Construct the jp2 file path based upon the original file path.
-
-                # If it's a .tif it gets converted to .jp2
-                if ( ext == ".tif" ):
-                    print(f"I Converting: {file_path} to jp2.")
-                    if not os.path.exists(jp2_path):
-                        convert_tiff_to_jp2(file_path, jp2_path)
-
-                # Update the manifest.csv file with the paths.
-                update_csv(df,'file','id',pid,jp2_path)
-
-        # This is a Manuscript.
-        if (file_type == "File" ) and ( parent != "" ):
-            dir,ext = os.path.splitext(file_path)
-            pid = os.path.basename(dir)
-            jp2_path = dir+'.jp2'
-            if ( ext == ".tif" ):
-                print(f"M Converting: {file_path} to jp2.")
-                if not os.path.exists(jp2_path):
-                    convert_tiff_to_jp2(file_path, jp2_path)
-
-            # Create entry in manifest.csv if it doesn't exist.
-            #if not value_exists_in_column(df,'id',parent):
-                # Create a row in manifest.csv.
-                # 'parent' = parent, 'file' = jp2_path
-                #print(f"M   Value does not exist in id column: {parent}/{pid}{ext}")
-            
-                #update_csv(df,'file','id',pid,jp2_path)
-
-        # This is a Directory.
-        if (file_type == "Directory" ):
-            print(f"D Directory: {file_path}")
-
-        # This is a directory.
-        #if ( file_type == "Directory" ):
-            #if ( file_name == "Other" ):
-            #    next
-            #else:
-                # Work on these file_names (Files):
-                #print(f"Working on directory: {file_name}")
-                
-                # See if {file_name} is listed in csv.
-                # if so, 
-                
-
-
-    # Write the updated manifest CSV file out.
-    write_csv(df,manifest_path)        
-
-    
-    # End Old Code.
-    # ---------------------------------------------------------------
 
 if __name__ == "__main__":
     main()

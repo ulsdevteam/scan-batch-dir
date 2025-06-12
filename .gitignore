@@ -1,4 +1,5 @@
 *.conf
 *.csv
 *.log
+*.json
 ignore/

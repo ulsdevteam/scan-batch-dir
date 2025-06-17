@@ -12,9 +12,15 @@ import openpyxl
 import csv
 import io
 import pandas as pd
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 # import from functions.py
 #from functions import *
+
+# Setup the log file format.
+log_formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
+
 
 def get_username() -> str:
     """
@@ -71,6 +77,26 @@ def read_yaml_file(path: str) -> dict:
         print(f"An unexpected error occurred while reading the YAML file: {str(e)}")
         raise e
 
+def setup_logger(name: str, log_file: str, level=logging.DEBUG) -> logging.Logger:
+    """
+    Sets up a logger with the specified name, log file, and logging level.
+
+    Args:
+        name (str): The name of the logger.
+        log_file (str): The file to log messages to.
+        level (int): The logging level (e.g., logging.DEBUG).
+
+    Returns:
+        logging.Logger: The configured logger.
+    """
+    handler = logging.FileHandler(log_file)
+    handler.setFormatter(log_formatter)
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    logger.addHandler(handler)
+    return logger
+
+
 def connect_to_google_sheet(credentials_file: str):
     """
     Connects to the Google Sheets API using service account credentials.
@@ -116,30 +142,37 @@ def read_google_sheet(spreadsheet_id: str, sheet_name="Sheet1", credentials_file
         service = connect_to_google_sheet(credentials_file);
 
         # Call the Sheets API
-        sheet = service.spreadsheets()
-        result = sheet.values().get(spreadsheetId=spreadsheet_id,
-                              range=sheet_name).execute()
+        sheet = service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range=sheet_name
+        ).execute()
 
         # Get the values
-        values = result.get('values', [])
+        data = sheet.get('values', [])
 
-        if not values:
-            print('No data found.')
+        if not data:
+            print('No data found in the specified worksheet.')
+            # Return empty DataFrame
             return pd.DataFrame()
 
         # Convert to DataFrame
         # First row as headers, rest as data
-        headers = values[0]
-        data = values[1:] if len(values) > 1 else []
+        headers = data[0]
+        rows = data[1:] if len(data) > 1 else []
+
+        # Pad rows with fewer columns with fill_value
+        fill_value = None
+        max_columns = len(headers)
+        padded_rows = [row + [fill_value] * (max_columns - len(row)) for row in rows]
 
         # Create DataFrame
-        df = pd.DataFrame(data, columns=headers)
-
+        df = pd.DataFrame(padded_rows, columns=headers)
+        
         return df
 
     except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        return pd.DataFrame()
+        print(f"Error accessing Google Sheet: {str(e)}")
+        return None
 
 def update_google_sheet(df: pd.DataFrame, spreadsheet_id: str, sheet_name: str, credentials_file: str) -> tuple:
     """
@@ -239,6 +272,46 @@ def update_dataframe(df: pd.DataFrame, match_column: str, match_value, update_co
 
     except Exception as e:
         return df, False, f"An error occurred: {str(e)}"
+
+def add_row_to_dataframe(df, row_data, key_column):
+    """
+    Add a new row to a pandas DataFrame, ensuring the key column value is unique.
+    
+    Parameters:
+    df (pandas.DataFrame): The input DataFrame
+    row_data (dict): Dictionary containing the new row data with column names as keys
+    key_column (str): The column name to check for uniqueness
+    
+    Returns:
+    pandas.DataFrame: DataFrame with the new row appended if key is unique, original DataFrame otherwise
+    """
+   
+    print(f"add_row_to_dataframe:")
+    print(df)
+
+    df.columns = ['id', 'title', 'file']
+ 
+    #print(f"Columns:")
+    #print(df.columns)
+        
+    # Check if key_column exists in DataFrame
+    if key_column not in df.columns:
+        raise ValueError(f"Key column '{key_column}' not found in DataFrame")
+    
+    # Check if key_column exists in row_data
+    if key_column not in row_data:
+        raise ValueError(f"Key column '{key_column}' not found in row_data")
+    
+    # Check if the key value already exists
+    if row_data[key_column] in df[key_column].values:
+        print(f"Warning: Key value '{row_data[key_column]}' already exists in column '{key_column}'. Row not added.")
+        return df
+    
+    # Convert row_data to DataFrame
+    new_row = pd.DataFrame([row_data])
+    
+    # Append new row to DataFrame
+    return pd.concat([df, new_row], ignore_index=True)
 
 def value_exists_in_column(df, column_name, value):
     """
@@ -407,7 +480,7 @@ def is_valid_dataframe(df: pd.DataFrame) -> bool:
     Returns:
         bool: True if valid, False otherwise.
     """
-    return isinstance(df, pd.DataFrame) and not df.empty
+    return isinstance(df, pd.DataFrame) # and not df.empty
 
 
 def validate_spreadsheet(csv_file):
@@ -447,7 +520,24 @@ def parse_arguments():
 
     return args
 
-def process_image():
+def process_tiff(file_path:str):
+    # Process a .tif file.
+    print(f"Processing a TIFF file: {file_path}.")
+
+def process_mp3(file_path:str):
+    # Process a .mp3 file.
+    print(f"Processing a MP3 file: {file_path}.")
+
+def process_vtt(file_path:str):
+    # Process a .vtt file.
+    print(f"Processing a WebVTT file: {file_path}.")
+
+def process_srt(file_path:str):
+    # Process a .srt file.
+    print(f"Processing a SRT file: {file_path}.")
+
+
+def process_image(file_path: str):
     logger.info(f"Processing an image.")
     # Images are kept at the top level folder.
 
@@ -458,91 +548,179 @@ def process_image():
 
     # If it's a .tif it gets converted to .jp2
     if ( ext == ".tif" ):
-        print(f"I Converting: {file_path} to jp2.")
+        print(f"Converting: {file_path} to jp2.")
+        
+        # if the JP2 does not exist:
         if not os.path.exists(jp2_path):
+            # Create the JP2
             convert_tiff_to_jp2(file_path, jp2_path)
 
-    # Update the sheet with the paths.
-    #update_csv(df,'file','id',pid,jp2_path)
-    #df,success,msg = update_dataframe(df, match_column, match_value, update_column, update_value)
+        # Update the Dataframe.
+        # updated_df,success,msg = update_dataframe(df, match_column, match_value, update_column, update_value)
+        #updated_df,success,msg = update_dataframe(df, 'id', pid, 'file', jp2_path)
+
+        # Write the changes to the google sheet.
+        #success,msg = update_google_sheet(updated_df, google_spreadsheet_id, google_sheet_name, google_credentials_file)
 
     logger.info(f"Processing an image - complete.")
 
-
-
-def process_object():
-    logger.info(f"Processing an object.")
+def process_object(file_type: str, file_path: str, parent: str, df):
+    #logger.info(f"Processing an object.")
     # object files are kept within a folder of the top level folder.
+    # files are .tif files which need to be converted.
 
     if (file_type == "File" ) and ( parent != "" ):
         dir,ext = os.path.splitext(file_path)
-        pid = os.path.basename(dir)
+        file_name = os.path.basename(dir)
+        pid = file_name
         jp2_path = dir+'.jp2'
+
+        #print(f"File: {file_name}")
+        #print(f"Dir: {dir}")
+        #print(f"Ext: {ext}")
+        #print(f"Par: {parent}")
+        #print(f"Type: {file_type}")
+        #print(f"Path: {file_path}")
+        obj_pid = f"{parent}-{file_name}"
+        #print(f"PID2: {obj_pid}")
+
+        # If the file extension is .tif
         if ( ext == ".tif" ):
-            print(f"M Converting: {file_path} to jp2.")
-            if not os.path.exists(jp2_path):
-                convert_tiff_to_jp2(file_path, jp2_path)
+            logger.info(f"Processing TIFF: {file_path}")
+            print(f"Processing TIFF: {file_path}")
+            process_tiff(file_path)
 
-    # Update the sheet.
-    #df,success,msg = update_dataframe(df, match_column, match_value, update_column, update_value)
+            #if not os.path.exists(jp2_path):
+            #    convert_tiff_to_jp2(file_path, jp2_path)
 
-    logger.info(f"Processing an object - complete.")
+            if (value_exists_in_column(df,'id',pid)):
+                # Update the sheet.
+                #updated_df,success,msg = update_dataframe(df, match_column, match_value, update_column, update_value)
+                updated_df,success,msg = update_dataframe(df, 'id', pid, 'file', jp2_path)
+
+                # Write the changes to the google sheet.
+                success,msg = update_google_sheet(updated_df, google_sheet_id, google_sheet_name, google_credentials)
+            #else:
+                # Add to the sheet.
+                # TODO.
 
 
-def process_directory():
+        if ( ext == ".mp3" ):
+            print(f"Procesing MP3.")
+            process_mp3(file_path)
+    
+        if ( ext == ".vtt" ):
+            print(f"Processing WebVTT.")
+            process_vtt(file_path)
+
+        if ( ext == ".srt" ):
+            print(f"Processing SRT.")
+            process_srt(file_path)
+
+    #logger.info(f"Processing an object: {file_path} - complete.")
+
+
+def process_directory(file_type: str, file_path: str, parent: str, df):
     # folders under the top level folder are considered object folders.
-    logger.info(f"Processing a subdirectory.")
+    print(f"Processing Directory: {file_path}.")
+    logger.info(f"Processing Directory: {file_path}.")
+    
+    # ignore the ignore directory:
+    substring = "ignore"
+    if substring.casefold() in file_path:
+        logger.info(f"Ignoreing: {file_path}")
+    else:
+        if (file_type == "Directory"):
+            dir,ext = os.path.splitext(file_path)
+            dir_name = os.path.basename(dir)
+            pid = dir_name
+            #logger.info(f"Directory: {dir}")
+            #print(f"Directory: {dir}")
 
-    # Update the sheet.
-    #df,success,msg = update_dataframe(df, match_column, match_value, update_column, update_value)
+            # Check to see if the directory (object) exists in the dataframe.
+            # if it does...
+            if (value_exists_in_column(df,'id',pid)):
+                # Found - Update the sheet 
+                print(f"Found: {pid} in Google Sheet")
+                logger.info(f"Found: {pid} in Google Sheet")
 
-    logger.info(f"Processing a subdirectory - complete.")
+                # Update the dataframe.
+                logger.info(f"Updating DataFrame")
+                updated_df,success,msg = update_dataframe(df, 'id', pid, 'file', file_path)
+
+                # Update the Google Sheet.
+                logger.info(f"Updating Google Sheet")
+                success,msg = update_google_sheet(updated_df, google_sheet_id, google_sheet_name, google_credentials)
+                if (success):
+                    logger.info(f"Updated Google Sheet.")
+                    print(f"Updated Google Sheet")
+                else:
+                    logger.warn(f"Failed to update Google Sheet: {msg}")
+                    print(f"Failed to update Google Sheet: {msg}")
+            else:
+                print(f"Not Found: Adding {pid} to Google Sheet")
+                logger.info(f"Not Found: Adding {pid} to Google Sheet")
+
+                # if it doesn't...
+                # Add it to the sheet.
+                row_data = {'id': pid, 'title':'', 'file': file_path}
+
+                # Update the dataframe.
+                logger.info(f"Updating DataFrame")
+                updated_df = add_row_to_dataframe(df,row_data,key_column='id')
+
+                # Update the Google Sheet.
+                logger.info(f"Updating Google Sheet.")
+                success,msg = update_google_sheet(updated_df, google_sheet_id, google_sheet_name, google_credentials)
+                if (success):
+                    logger.info(f"Updated Google Sheet.")
+                    print(f"Updated Google Sheet")
+                else:
+                    logger.warn(f"Failed to update Google Sheet: {msg}")
+                    print(f"Failed to update Google Sheet: {msg}") 
+
+    logger.info(f"Processing Directory: {dir} - complete.")
 
 
-def process_files(data):
+def process_files(data,directory,df):
     # Begin Processing the listing of the directory.
     logger.info(f"Processing file data.")
 
     # Loop through the listing.
     for row, (file_name, file_type, file_path) in enumerate(data, start=2):
-        print(f"Inspecting: {file_path}")
-
         # Skip things we don't want to include.
         if (( file_name == "target.tif" ) or ( file_name == "manifest.csv" ) or ( file_name == "manifest.xlsx" )):
             next
         else:
+            print(f"Inspecting: {file_path}")
             # Define the parent
             parent = file_path.replace(directory, "")
             parent = parent.replace("/"+file_name, "")
             parent = parent.replace("/","")
 
             if ( file_type == "File" ) and ( parent == "" ):
-                # This is an Image.
+                # This is an Image in the top level directory.
                 print(f"Image: {file_path}")
-                process_image()
+                process_image(file_path)
 
             if (file_type == "File" ) and ( parent != "" ):
                 # This is an Object.
                 print(f"Object: {file_path}")
-                process_object()
+                process_object(file_type,file_path,parent,df)
 
             if (file_type == "Directory" ):
                 # This is a Directory.
                 print(f"Directory: {file_path}")
-                process_directory()
-
-    # Write the Sheet.
-    #write_csv(df,manifest_path)
-
+                process_directory(file_type,file_path,parent,df)
 
     
 
 def main():
     # Setup the log file format.
-    log_formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
+    globals()['log_formatter'] = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
 
     # Parse command line arguements.
-    args = parse_arguments()
+    globals()['args'] = parse_arguments()
 
     # Obtain the user running the script.
     username            = get_username()
@@ -551,19 +729,19 @@ def main():
     cfg                 = read_yaml_file(args.config_file)
 
     # Set Google variables from config file.
-    google_credentials  = cfg['google_credentials_file']
-    google_sheet_id     = cfg['google_sheet_id']
-    google_sheet_name   = cfg['google_sheet_name']
+    globals()['google_credentials']  = cfg['google_credentials_file']
+    globals()['google_sheet_id']     = cfg['google_sheet_id']
+    globals()['google_sheet_name']   = cfg['google_sheet_name']
 
     # Create the Log file.
-    print(f"Creating log file: {args.log_file}")
-    logger = setup_logger('logger', args.log_file, level=logging.DEBUG, formatter=log_formatter)
+    #print(f"Creating log file: {args.log_file}")
+    globals()['logger'] = setup_logger('logger', args.log_file, level=logging.DEBUG)
     logger.info(f"Begin log.")
 
     # Get external command paths.
     gm_path = shutil.which("gm")
 
-
+    # Check 'gm' exists.
     if gm_path:
         logger.info(f"GraphicsMagick Executable found at: {gm_path}")
     else:
@@ -573,21 +751,41 @@ def main():
         exit()
 
     # Connect to Google Sheets and read the Sheet to dataframe.
+    logger.info(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     print(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     df = read_google_sheet(google_sheet_id, google_sheet_name, google_credentials)
-    if (is_valid_dataframe(df)):
-        
-        # Scan the directory and return a list of directory contents.
-        file_data = scan_directory(args.directory)
+    print(df)
 
-        # Process the contents.
-        process_files(file_data)
+    # Scan the directory and return a list of directory contents.
+    logger.info(f"Scan the directory: {args.directory}")
+    file_data = scan_directory(args.directory)
 
-    else:
-        logger.error(f"Google Sheet is invalid.")
-        print(f"Google Sheet is invalid.")
-        exit()
+    # Process the contents.
+    logger.info(f"Process the directory: {args.directory}")
+    process_files(file_data,args.directory,df)
 
+    exit()
+
+
+
+# Setup the log file format.
+#log_formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
+
+# Parse command line arguements.
+#args = parse_arguments()
+
+# Create the Log file.
+#print(f"Creating log file: {args.log_file}")
+#logger = setup_logger('logger', args.log_file, level=logging.DEBUG)
+#logger.info(f"Begin log.")
+
+# Define a global dataframe.
+df = pd.DataFrame()
+
+# Setup global variables.
+google_credentials = None
+google_sheet_id = None
+google_sheet_name = None
 
 if __name__ == "__main__":
     main()

@@ -285,17 +285,16 @@ def add_row_to_dataframe(df, row_data, key_column):
     Returns:
     pandas.DataFrame: DataFrame with the new row appended if key is unique, original DataFrame otherwise
     """
-   
-    print(f"add_row_to_dataframe:")
-    print(df)
+  
+    # Get existing Google Sheet DataFrame.
+    current_df = read_google_sheet(google_sheet_id, google_sheet_name, google_credentials)
 
-    df.columns = ['id', 'title', 'file']
- 
-    #print(f"Columns:")
-    #print(df.columns)
-        
+    #
+    current_df.columns = ['id', 'title', 'file']
+
+    # Update the Dataframe.
     # Check if key_column exists in DataFrame
-    if key_column not in df.columns:
+    if key_column not in current_df.columns:
         raise ValueError(f"Key column '{key_column}' not found in DataFrame")
     
     # Check if key_column exists in row_data
@@ -303,15 +302,15 @@ def add_row_to_dataframe(df, row_data, key_column):
         raise ValueError(f"Key column '{key_column}' not found in row_data")
     
     # Check if the key value already exists
-    if row_data[key_column] in df[key_column].values:
+    if row_data[key_column] in current_df[key_column].values:
         print(f"Warning: Key value '{row_data[key_column]}' already exists in column '{key_column}'. Row not added.")
         return df
     
     # Convert row_data to DataFrame
     new_row = pd.DataFrame([row_data])
     
-    # Append new row to DataFrame
-    return pd.concat([df, new_row], ignore_index=True)
+    # Append the new row to DataFrame
+    return pd.concat([current_df, new_row], ignore_index=True)
 
 def value_exists_in_column(df, column_name, value):
     """
@@ -523,18 +522,47 @@ def parse_arguments():
 def process_tiff(file_path:str):
     # Process a .tif file.
     print(f"Processing a TIFF file: {file_path}.")
+    pid,parent,file,dir,ext = get_file_info(file_path)
+
+    # Create the JP2 derivative if it does not already exist.
+    # if the JP2 does not exist:
+    jp2_path = f"{dir}/{pid}.jp2"
+    out_pid  = f"{parent}-{pid}"
+
+    logger.info(f"Tiff: Creating JP2: {jp2_path}")
+    print(f"Tiff: Creating JP2: {jp2_path} from {file_path}")
+    #if not os.path.exists(jp2_path):
+    #    convert_tiff_to_jp2(file_path, jp2_path)
+
+    return out_pid,jp2_path
 
 def process_mp3(file_path:str):
     # Process a .mp3 file.
     print(f"Processing a MP3 file: {file_path}.")
+    pid,parent,file,dir,ext = get_file_info(file_path)
+    out_pid = f"{parent}-{pid}"
+
+    mp3_path = f"{dir}/{pid}{ext}"
+
+    return out_pid,mp3_path
 
 def process_vtt(file_path:str):
     # Process a .vtt file.
     print(f"Processing a WebVTT file: {file_path}.")
+    pid,parent,file,dir,ext = get_file_info(file_path)
+    out_pid = f"{parent}-{pid}"
+    vtt_path = f"{dir}/{pid}{ext}"
+
+    return out_pid,vtt_path
 
 def process_srt(file_path:str):
     # Process a .srt file.
     print(f"Processing a SRT file: {file_path}.")
+    pid,parent,file,dir,ext = get_file_info(file_path)
+    out_pid = f"{parent}-{pid}"
+    srt_path = f"{dir}/{pid}{ext}"
+
+    return out_pid,vtt_path
 
 
 def process_image(file_path: str):
@@ -542,8 +570,12 @@ def process_image(file_path: str):
     # Images are kept at the top level folder.
 
     # Create additional variables.
-    dir,ext = os.path.splitext(file_path)  # Split the file_path into directory and extension.
-    pid = os.path.basename(dir)            # Assign pid to the last piece of the directory.
+    #dir,ext = os.path.splitext(file_path)  # Split the file_path into directory and extension.
+    #pid = os.path.basename(dir)            # Assign pid to the last piece of the directory.
+
+    pid,parent,file,dir,ext = get_file_info(file_path)
+    
+    # Create the output file path.
     jp2_path = dir+'.jp2'                  # Construct the jp2 file path based upon the original file path.
 
     # If it's a .tif it gets converted to .jp2
@@ -564,6 +596,17 @@ def process_image(file_path: str):
 
     logger.info(f"Processing an image - complete.")
 
+def get_file_info(file_path: str):
+    dir,ext = os.path.splitext(file_path)   # Split the file_path into directory and extension.
+    file_name = os.path.basename(dir)       # Get the file_name of the object which will usually be the pid.
+    pid = file_name                         # Assign pid to the last piece of the directory.
+    parent = os.path.basename(os.path.dirname(file_path))
+    dir = os.path.dirname(file_path)
+    file = f"{pid}{ext}"
+
+    return(pid,parent,file,dir,ext)
+
+
 def process_object(file_type: str, file_path: str, parent: str, df):
     #logger.info(f"Processing an object.")
     # object files are kept within a folder of the top level folder.
@@ -573,51 +616,49 @@ def process_object(file_type: str, file_path: str, parent: str, df):
         dir,ext = os.path.splitext(file_path)
         file_name = os.path.basename(dir)
         pid = file_name
-        jp2_path = dir+'.jp2'
-
-        #print(f"File: {file_name}")
-        #print(f"Dir: {dir}")
-        #print(f"Ext: {ext}")
-        #print(f"Par: {parent}")
-        #print(f"Type: {file_type}")
-        #print(f"Path: {file_path}")
         obj_pid = f"{parent}-{file_name}"
-        #print(f"PID2: {obj_pid}")
 
-        # If the file extension is .tif
         if ( ext == ".tif" ):
             logger.info(f"Processing TIFF: {file_path}")
             print(f"Processing TIFF: {file_path}")
-            process_tiff(file_path)
-
-            #if not os.path.exists(jp2_path):
-            #    convert_tiff_to_jp2(file_path, jp2_path)
+            outpid,outfile = process_tiff(file_path)
 
             if (value_exists_in_column(df,'id',pid)):
                 # Update the sheet.
+                logger.info(f"Updating Dataframe: {outpid},{outfile}")
                 #updated_df,success,msg = update_dataframe(df, match_column, match_value, update_column, update_value)
-                updated_df,success,msg = update_dataframe(df, 'id', pid, 'file', jp2_path)
+                updated_df,success,msg = update_dataframe(df, 'id', outpid, 'file', outfile)
 
                 # Write the changes to the google sheet.
                 success,msg = update_google_sheet(updated_df, google_sheet_id, google_sheet_name, google_credentials)
-            #else:
-                # Add to the sheet.
-                # TODO.
+            else:
+                # Add it to the sheet.
+                row_data = {'id': outpid, 'title':'', 'file': outfile}
 
+                # Update the dataframe.
+                logger.info(f"Updating the DataFrame with new {pid}")
+                updated_df = add_row_to_dataframe(df,row_data,key_column='id')
+
+                # Write the changes to the google sheet.
+                success,msg = update_google_sheet(updated_df, google_sheet_id, google_sheet_name, google_credentials)
 
         if ( ext == ".mp3" ):
-            print(f"Procesing MP3.")
+            logger.info(f"Processing MP3: {file_path}")
+            print(f"Procesing MP3: {file_path}")
             process_mp3(file_path)
+            # More to do here.
     
         if ( ext == ".vtt" ):
-            print(f"Processing WebVTT.")
+            logger.info(f"Processing WebVTT: {file_path}")
+            print(f"Processing WebVTT: {file_path}")
             process_vtt(file_path)
+            # More to do here.
 
         if ( ext == ".srt" ):
             print(f"Processing SRT.")
             process_srt(file_path)
+            # More to do here.
 
-    #logger.info(f"Processing an object: {file_path} - complete.")
 
 
 def process_directory(file_type: str, file_path: str, parent: str, df):
@@ -698,21 +739,16 @@ def process_files(data,directory,df):
             parent = parent.replace("/"+file_name, "")
             parent = parent.replace("/","")
 
-            if ( file_type == "File" ) and ( parent == "" ):
-                # This is an Image in the top level directory.
-                print(f"Image: {file_path}")
-                process_image(file_path)
-
-            if (file_type == "File" ) and ( parent != "" ):
-                # This is an Object.
-                print(f"Object: {file_path}")
+            if ( file_type == "File" ):
+                # This is a file
+                print(f"File: {file_path}")
                 process_object(file_type,file_path,parent,df)
 
             if (file_type == "Directory" ):
                 # This is a Directory.
                 print(f"Directory: {file_path}")
                 process_directory(file_type,file_path,parent,df)
-
+        print(f"\n")
     
 
 def main():
@@ -754,7 +790,7 @@ def main():
     logger.info(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     print(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     df = read_google_sheet(google_sheet_id, google_sheet_name, google_credentials)
-    print(df)
+    #print(df)
 
     # Scan the directory and return a list of directory contents.
     logger.info(f"Scan the directory: {args.directory}")

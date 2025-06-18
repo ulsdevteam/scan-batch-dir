@@ -632,6 +632,11 @@ def process_object(file_type: str, file_path: str, parent: str, df):
             process_srt(file_path)
             # More to do here.
 
+    # Process Top Level file...
+    if (file_type == "File") and (parrent == ""):
+        # Top Level file.
+        print(f"Processing Top-Level File")
+
     # Process Directory... 
     if (file_type == "Directory"):
         print(f"Processing Directory")
@@ -684,6 +689,9 @@ def process_object(file_type: str, file_path: str, parent: str, df):
                     logger.warn(f"Failed to update Google Sheet: {msg}")
                     print(f"Failed to update Google Sheet: {msg}")
 
+    return df
+
+
 
 def process_objects(data,directory,df):
     # Begin Processing the listing of the directory.
@@ -704,9 +712,11 @@ def process_objects(data,directory,df):
             parent = parent.replace("/"+file_name, "")
             parent = parent.replace("/","")
 
-            process_object(file_type,file_path,parent,df_copy)
+            df_copy = process_object(file_type,file_path,parent,df_copy)
 
         print(f"\n")
+
+    # Save off the df_copy to Google Sheets.
     
 
 def main():

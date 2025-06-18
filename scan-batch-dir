@@ -562,7 +562,7 @@ def process_srt(file_path:str):
     out_pid = f"{parent}-{pid}"
     srt_path = f"{dir}/{pid}{ext}"
 
-    return out_pid,vtt_path
+    return out_pid,srt_path
 
 
 def get_file_info(file_path: str):

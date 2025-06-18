@@ -565,37 +565,6 @@ def process_srt(file_path:str):
     return out_pid,vtt_path
 
 
-def process_image(file_path: str):
-    logger.info(f"Processing an image.")
-    # Images are kept at the top level folder.
-
-    # Create additional variables.
-    #dir,ext = os.path.splitext(file_path)  # Split the file_path into directory and extension.
-    #pid = os.path.basename(dir)            # Assign pid to the last piece of the directory.
-
-    pid,parent,file,dir,ext = get_file_info(file_path)
-    
-    # Create the output file path.
-    jp2_path = dir+'.jp2'                  # Construct the jp2 file path based upon the original file path.
-
-    # If it's a .tif it gets converted to .jp2
-    if ( ext == ".tif" ):
-        print(f"Converting: {file_path} to jp2.")
-        
-        # if the JP2 does not exist:
-        if not os.path.exists(jp2_path):
-            # Create the JP2
-            convert_tiff_to_jp2(file_path, jp2_path)
-
-        # Update the Dataframe.
-        # updated_df,success,msg = update_dataframe(df, match_column, match_value, update_column, update_value)
-        #updated_df,success,msg = update_dataframe(df, 'id', pid, 'file', jp2_path)
-
-        # Write the changes to the google sheet.
-        #success,msg = update_google_sheet(updated_df, google_spreadsheet_id, google_sheet_name, google_credentials_file)
-
-    logger.info(f"Processing an image - complete.")
-
 def get_file_info(file_path: str):
     dir,ext = os.path.splitext(file_path)   # Split the file_path into directory and extension.
     file_name = os.path.basename(dir)       # Get the file_name of the object which will usually be the pid.

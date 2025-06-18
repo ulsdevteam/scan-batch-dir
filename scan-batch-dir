@@ -644,8 +644,6 @@ def process_directory(file_type: str, file_path: str, parent: str, df):
             dir,ext = os.path.splitext(file_path)
             dir_name = os.path.basename(dir)
             pid = dir_name
-            #logger.info(f"Directory: {dir}")
-            #print(f"Directory: {dir}")
 
             # Check to see if the directory (object) exists in the dataframe.
             # if it does...
@@ -759,7 +757,6 @@ def main():
     logger.info(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     print(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     df = read_google_sheet(google_sheet_id, google_sheet_name, google_credentials)
-    #print(df)
 
     # Scan the directory and return a list of directory contents.
     logger.info(f"Scan the directory: {args.directory}")
@@ -771,18 +768,6 @@ def main():
 
     exit()
 
-
-
-# Setup the log file format.
-#log_formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
-
-# Parse command line arguements.
-#args = parse_arguments()
-
-# Create the Log file.
-#print(f"Creating log file: {args.log_file}")
-#logger = setup_logger('logger', args.log_file, level=logging.DEBUG)
-#logger.info(f"Begin log.")
 
 # Define a global dataframe.
 df = pd.DataFrame()

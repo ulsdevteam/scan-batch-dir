@@ -581,7 +581,11 @@ def process_object(file_type: str, file_path: str, parent: str, df):
     # object files are kept within a folder of the top level folder.
     # files are .tif files which need to be converted.
 
+    # Process File...
     if (file_type == "File" ) and ( parent != "" ):
+        print(f"Processing File")
+        ignore_file_list = ["target.tif","manifest.csv","manifest.xlsx","manifest.xls"]
+
         dir,ext = os.path.splitext(file_path)
         file_name = os.path.basename(dir)
         pid = file_name
@@ -628,27 +632,20 @@ def process_object(file_type: str, file_path: str, parent: str, df):
             process_srt(file_path)
             # More to do here.
 
-
-
-def process_directory(file_type: str, file_path: str, parent: str, df):
-    # folders under the top level folder are considered object folders.
-    print(f"Processing Directory: {file_path}.")
-    logger.info(f"Processing Directory: {file_path}.")
-    
-    # ignore the ignore directory:
-    substring = "ignore"
-    if substring.casefold() in file_path:
-        logger.info(f"Ignoreing: {file_path}")
-    else:
-        if (file_type == "Directory"):
+    # Process Directory... 
+    if (file_type == "Directory"):
+        print(f"Processing Directory")
+        ignore_dir_list = ["ignore"]
+        if file_path.casefold() in ignore_dir_list:
+            logger.info(f"Ignoreing: {file_path}")
+        else:
+            # Continue
+            logger.info(f"Processing Directory: {file_path}")
             dir,ext = os.path.splitext(file_path)
-            dir_name = os.path.basename(dir)
-            pid = dir_name
-
-            # Check to see if the directory (object) exists in the dataframe.
-            # if it does...
+            pid = os.path.basename(dir)
+            # Check if pid in Google Sheet.
             if (value_exists_in_column(df,'id',pid)):
-                # Found - Update the sheet 
+                # Found...
                 print(f"Found: {pid} in Google Sheet")
                 logger.info(f"Found: {pid} in Google Sheet")
 
@@ -666,10 +663,10 @@ def process_directory(file_type: str, file_path: str, parent: str, df):
                     logger.warn(f"Failed to update Google Sheet: {msg}")
                     print(f"Failed to update Google Sheet: {msg}")
             else:
+                # Not Found...
                 print(f"Not Found: Adding {pid} to Google Sheet")
                 logger.info(f"Not Found: Adding {pid} to Google Sheet")
 
-                # if it doesn't...
                 # Add it to the sheet.
                 row_data = {'id': pid, 'title':'', 'file': file_path}
 
@@ -685,14 +682,15 @@ def process_directory(file_type: str, file_path: str, parent: str, df):
                     print(f"Updated Google Sheet")
                 else:
                     logger.warn(f"Failed to update Google Sheet: {msg}")
-                    print(f"Failed to update Google Sheet: {msg}") 
-
-    logger.info(f"Processing Directory: {dir} - complete.")
+                    print(f"Failed to update Google Sheet: {msg}")
 
 
-def process_files(data,directory,df):
+def process_objects(data,directory,df):
     # Begin Processing the listing of the directory.
     logger.info(f"Processing file data.")
+
+    # Copy the Dataframe.
+    df_copy = df.copy()
 
     # Loop through the listing.
     for row, (file_name, file_type, file_path) in enumerate(data, start=2):
@@ -706,15 +704,8 @@ def process_files(data,directory,df):
             parent = parent.replace("/"+file_name, "")
             parent = parent.replace("/","")
 
-            if ( file_type == "File" ):
-                # This is a file
-                print(f"File: {file_path}")
-                process_object(file_type,file_path,parent,df)
+            process_object(file_type,file_path,parent,df_copy)
 
-            if (file_type == "Directory" ):
-                # This is a Directory.
-                print(f"Directory: {file_path}")
-                process_directory(file_type,file_path,parent,df)
         print(f"\n")
     
 
@@ -764,7 +755,7 @@ def main():
 
     # Process the contents.
     logger.info(f"Process the directory: {args.directory}")
-    process_files(file_data,args.directory,df)
+    process_objects(file_data,args.directory,df)
 
     exit()
 

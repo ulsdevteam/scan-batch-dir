@@ -223,22 +223,8 @@ def update_google_sheet(df: pd.DataFrame, spreadsheet_id: str, sheet_name: str, 
     except Exception as e:
         return False, f"An error occurred: {str(e)}"
 
-def update_dataframe(df: pd.DataFrame, match_column: str, match_value, update_column: str, update_value):
-    """
-    Update a DataFrame by matching a value in a specified column and updating another column.
-
-    Parameters:
-    df (pandas.DataFrame): The input DataFrame
-    match_column (str): Name of the column to match on
-    match_value: Value to match in the match_column
-    update_column (str): Name of the column to update
-    update_value: Value to set in the update_column
-
-    Returns:
-    pandas.DataFrame: Updated DataFrame
-    boolean: True/False
-    str: Message
-    """
+def update_dataframe(df: pd.DataFrame, match_column: str, match_value: str, update_dict):
+    df.columns = ['id', 'title', 'file']
     try:
         # Verify input is a DataFrame
         if not isinstance(df, pd.DataFrame):
@@ -254,24 +240,26 @@ def update_dataframe(df: pd.DataFrame, match_column: str, match_value, update_co
         if update_column not in df.columns:
             return df, False, f"Update column '{update_column}' not found"
 
-        # Create a copy to avoid modifying the original
-        updated_df = df.copy()
+        df_copy = df.copy()
 
-        # Find rows to update
-        mask = updated_df[match_column].astype(str) == str(match_value)
+        mask = df_copy[match_column] == match_value
+
         if not mask.any():
-            return updated_df, False, f"No rows found matching '{match_value}' in '{match_column}'"
+            return df, False, f"No rows found matching '{match_value}' in '{match_column}'"
 
-        # Update the matching rows
-        updated_df.loc[mask, update_column] = update_value
+        for column, value in update_dict.items():
+            if column in df_copy.columns:
+                df_copy.loc[mask, column] = value
 
-        # Count updated rows
-        updated_count = mask.sum()
+        # Clean Dataframe of NaN values.
+        df_cleaned = df_copy.fillna('')
 
-        return updated_df, True, f"Successfully updated {updated_count} row(s)"
+        return df_cleaned, True, f"Successfully updated dataframe row"
 
     except Exception as e:
         return df, False, f"An error occurred: {str(e)}"
+    
+
 
 def add_row_to_dataframe(df, row_data, key_column):
     """
@@ -286,15 +274,12 @@ def add_row_to_dataframe(df, row_data, key_column):
     pandas.DataFrame: DataFrame with the new row appended if key is unique, original DataFrame otherwise
     """
   
-    # Get existing Google Sheet DataFrame.
-    current_df = read_google_sheet(google_sheet_id, google_sheet_name, google_credentials)
-
     #
-    current_df.columns = ['id', 'title', 'file']
+    df.columns = ['id', 'title', 'file']
 
     # Update the Dataframe.
     # Check if key_column exists in DataFrame
-    if key_column not in current_df.columns:
+    if key_column not in df.columns:
         raise ValueError(f"Key column '{key_column}' not found in DataFrame")
     
     # Check if key_column exists in row_data
@@ -302,7 +287,7 @@ def add_row_to_dataframe(df, row_data, key_column):
         raise ValueError(f"Key column '{key_column}' not found in row_data")
     
     # Check if the key value already exists
-    if row_data[key_column] in current_df[key_column].values:
+    if row_data[key_column] in df[key_column].values:
         print(f"Warning: Key value '{row_data[key_column]}' already exists in column '{key_column}'. Row not added.")
         return df
     
@@ -310,7 +295,12 @@ def add_row_to_dataframe(df, row_data, key_column):
     new_row = pd.DataFrame([row_data])
     
     # Append the new row to DataFrame
-    return pd.concat([current_df, new_row], ignore_index=True)
+    df_ret = pd.concat([df, new_row], ignore_index=True)
+
+    # Remove any NaN values.
+    df_cleaned = df_ret.fillna('')
+
+    return df_cleaned
 
 def value_exists_in_column(df, column_name, value):
     """
@@ -597,23 +587,25 @@ def process_object(file_type: str, file_path: str, parent: str, df):
             outpid,outfile = process_tiff(file_path)
 
             if (value_exists_in_column(df,'id',pid)):
-                # Update the sheet.
+                # Update.
                 logger.info(f"Updating Dataframe: {outpid},{outfile}")
-                #updated_df,success,msg = update_dataframe(df, match_column, match_value, update_column, update_value)
-                updated_df,success,msg = update_dataframe(df, 'id', outpid, 'file', outfile)
 
-                # Write the changes to the google sheet.
-                success,msg = update_google_sheet(updated_df, google_sheet_id, google_sheet_name, google_credentials)
+                # Set Row Data.
+                row_data = {'id': outpid, 'file': outfile}
+
+                # Update the DataFrame.
+                updated_df,success,msg = update_dataframe(df, 'id', outpid, row_data)
+
             else:
-                # Add it to the sheet.
-                row_data = {'id': outpid, 'title':'', 'file': outfile}
+                # Add.
+                logger.info(f"Adding to Dataframe: {outpid},{outfile}")
+
+                # Set Row Data.
+                row_data = {'id': outpid, 'file': outfile}
 
                 # Update the dataframe.
-                logger.info(f"Updating the DataFrame with new {pid}")
                 updated_df = add_row_to_dataframe(df,row_data,key_column='id')
 
-                # Write the changes to the google sheet.
-                success,msg = update_google_sheet(updated_df, google_sheet_id, google_sheet_name, google_credentials)
 
         if ( ext == ".mp3" ):
             logger.info(f"Processing MP3: {file_path}")
@@ -633,7 +625,7 @@ def process_object(file_type: str, file_path: str, parent: str, df):
             # More to do here.
 
     # Process Top Level file...
-    if (file_type == "File") and (parrent == ""):
+    if (file_type == "File") and (parent == ""):
         # Top Level file.
         print(f"Processing Top-Level File")
 
@@ -648,57 +640,47 @@ def process_object(file_type: str, file_path: str, parent: str, df):
             logger.info(f"Processing Directory: {file_path}")
             dir,ext = os.path.splitext(file_path)
             pid = os.path.basename(dir)
+            
             # Check if pid in Google Sheet.
             if (value_exists_in_column(df,'id',pid)):
                 # Found...
                 print(f"Found: {pid} in Google Sheet")
                 logger.info(f"Found: {pid} in Google Sheet")
 
+                # Set Row Data
+                row_data = {'id': pid}
+
                 # Update the dataframe.
                 logger.info(f"Updating DataFrame")
-                updated_df,success,msg = update_dataframe(df, 'id', pid, 'file', file_path)
+                updated_df,success,msg = update_dataframe(df, 'id', pid, row_data)
 
-                # Update the Google Sheet.
-                logger.info(f"Updating Google Sheet")
-                success,msg = update_google_sheet(updated_df, google_sheet_id, google_sheet_name, google_credentials)
-                if (success):
-                    logger.info(f"Updated Google Sheet.")
-                    print(f"Updated Google Sheet")
-                else:
-                    logger.warn(f"Failed to update Google Sheet: {msg}")
-                    print(f"Failed to update Google Sheet: {msg}")
+                if not (success):
+                    print(f"Update DataFrame: failed for PID: {pid}")
+
             else:
                 # Not Found...
                 print(f"Not Found: Adding {pid} to Google Sheet")
                 logger.info(f"Not Found: Adding {pid} to Google Sheet")
 
-                # Add it to the sheet.
-                row_data = {'id': pid, 'title':'', 'file': file_path}
+                # Set Row Data.
+                row_data = {'id': pid}
 
                 # Update the dataframe.
                 logger.info(f"Updating DataFrame")
+                print(f"Number of Rows: {len(df)}")
+                print(f"Adding: {row_data}")
                 updated_df = add_row_to_dataframe(df,row_data,key_column='id')
+    
+                print(f"Dataframe:")
+                print(df)
 
-                # Update the Google Sheet.
-                logger.info(f"Updating Google Sheet.")
-                success,msg = update_google_sheet(updated_df, google_sheet_id, google_sheet_name, google_credentials)
-                if (success):
-                    logger.info(f"Updated Google Sheet.")
-                    print(f"Updated Google Sheet")
-                else:
-                    logger.warn(f"Failed to update Google Sheet: {msg}")
-                    print(f"Failed to update Google Sheet: {msg}")
-
-    return df
+    return updated_df
 
 
 
 def process_objects(data,directory,df):
     # Begin Processing the listing of the directory.
     logger.info(f"Processing file data.")
-
-    # Copy the Dataframe.
-    df_copy = df.copy()
 
     # Loop through the listing.
     for row, (file_name, file_type, file_path) in enumerate(data, start=2):
@@ -712,12 +694,22 @@ def process_objects(data,directory,df):
             parent = parent.replace("/"+file_name, "")
             parent = parent.replace("/","")
 
-            df_copy = process_object(file_type,file_path,parent,df_copy)
+            df = process_object(file_type,file_path,parent,df)
 
         print(f"\n")
 
-    # Save off the df_copy to Google Sheets.
-    
+    print(f"Dataframe")
+    print(df)
+
+    # Save off the df to Google Sheets.
+    success,msg = update_google_sheet(df, google_sheet_id, google_sheet_name, google_credentials)
+    if (success):
+        logger.info(f"Updated Google Sheet.")
+        print(f"Updated Google Sheet")
+    else:
+        logger.warning(f"Failed to update Google Sheet: {msg}")
+        print(f"Failed to update Google Sheet: {msg}")
+
 
 def main():
     # Setup the log file format.

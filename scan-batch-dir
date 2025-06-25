@@ -517,6 +517,7 @@ def parse_arguments():
     # Optional arguments
     parser.add_argument('--in-google-sheet-id', dest="in_gs_id", help='Google Sheet ID related to the directory.')
     parser.add_argument('--in-google-sheet-name', dest="in_gs_name", help='Google Sheet Tab Name.')
+    parser.add_argument('--in-google-creds-file', dest="in_gs_creds", help='Google Credentials json file.')
     
     # Parse Arguments
     args = parser.parse_args()
@@ -871,16 +872,28 @@ def main():
     username            = get_username()
 
     # Get the configuration file contents.
-    cfg                 = read_yaml_file(args.config_file)
+    globals()['cfg'] = read_yaml_file(args.config_file)
 
     # Set Google variables from config file.
     globals()['google_credentials']  = cfg['google_credentials_file']
     globals()['google_sheet_id']     = cfg['google_sheet_id']
     globals()['google_sheet_name']   = cfg['google_sheet_name']
+    globals()['log_file']            = cfg['log_file']
+
+    # Override config file variables with command line parameters.
+    if args.in_gs_creds is not None:
+        globals()['google_credentials'] = args.in_gs_creds
+    if args.in_gs_id is not None:
+        globals()['google_sheet_id'] = args.in_gs_id
+    if args.in_gs_name is not None: 
+        globals()['google_sheet_name'] = args.in_gs_name
+    if args.log_file is not None:
+        globals()['log_file'] = args.log_file
 
     # Create the Log file.
     #print(f"Creating log file: {args.log_file}")
-    globals()['logger'] = setup_logger('logger', args.log_file, level=logging.DEBUG)
+    #globals()['logger'] = setup_logger('logger', args.log_file, level=logging.DEBUG)
+    globals()['logger'] = setup_logger('logger', log_file, level=logging.DEBUG)
     logger.info(f"Begin log.")
 
     # Get external command paths.

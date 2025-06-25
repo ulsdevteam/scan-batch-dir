@@ -1,0 +1,16 @@
+#--------------------------------------------------------------------
+# scan-batch-dir config file. (Sample)
+#--------------------------------------------------------------------
+
+#--------------------------------------------------------------------
+# Google Sheets Settings
+#--------------------------------------------------------------------
+# Google Credentials File location:
+google_credentials_file: /path/to/file.json
+google_sheet_id: EXAMPLESheetIDxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+google_sheet_name: Sheet1
+
+#--------------------------------------------------------------------
+# Log file
+log_file: /path/to/file.log
+

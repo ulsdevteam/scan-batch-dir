@@ -256,6 +256,9 @@ def update_dataframe(df: pd.DataFrame, match_column: str, match_value: str, upda
         for column, value in update_dict.items():
             if column in df_copy.columns:
                 df_copy.loc[mask, column] = value
+            else:
+                logger.warning(f"update_dataframe: Column:{column} does not exist - unable to update with value: {value}.") 
+                print(f"update_dataframe: Column:{column} does not exist - unable to update with value: {value}.")
 
         # Clean Dataframe of NaN values.
         df = df_copy.fillna('')
@@ -522,7 +525,7 @@ def parse_arguments():
 
 def process_tiff(file_path:str):
     # Process a .tif file.
-    print(f"Processing a TIFF file: {file_path}.")
+    #print(f"Processing a TIFF file: {file_path}.")
     pid,parent,file,dir,ext = get_file_info(file_path)
 
     # Create the JP2 derivative if it does not already exist.
@@ -539,34 +542,34 @@ def process_tiff(file_path:str):
 
 def process_mp3(file_path:str):
     # Process a .mp3 file.
-    print(f"Processing a MP3 file: {file_path}.")
+    #print(f"Processing a MP3 file: {file_path}.")
     pid,parent,file,dir,ext = get_file_info(file_path)
     out_pid = f"{parent}-{pid}"
     mp3_path = f"{dir}/{pid}{ext}"
 
     return out_pid,mp3_path
 
-def process_vtt(file_path:str):
-    # Process a .vtt file.
-    print(f"Processing a WebVTT file: {file_path}.")
+def process_transcript(file_path:str):
+    # Process a .vtt or .srt file.
+    #print(f"Processing a WebVTT/SRT file: {file_path}.")
     pid,parent,file,dir,ext = get_file_info(file_path)
     out_pid = f"{parent}-{pid}"
     vtt_path = f"{dir}/{pid}{ext}"
 
     return out_pid,vtt_path
 
-def process_srt(file_path:str):
-    # Process a .srt file.
-    print(f"Processing a SRT file: {file_path}.")
+def process_thumbnail(file_path:str):
+    # Process a thumbnail (.jpg/.png).
+    #print(f"Processing a Thumbnail file: {file_path}.")
     pid,parent,file,dir,ext = get_file_info(file_path)
     out_pid = f"{parent}-{pid}"
-    srt_path = f"{dir}/{pid}{ext}"
+    tn_path = f"{dir}/{pid}{ext}"
 
-    return out_pid,srt_path
+    return out_pid,tn_path
 
 def process_unknown(file_path:str):
     # Process a unknown file.
-    print(f"Processing an Unknown file: {file_path}.")
+    #print(f"Processing an Unknown file: {file_path}.")
     pid,parent,file,dir,ext = get_file_info(file_path)
     out_pid = f"{parent}-{pid}"
     unknown_path = f"{dir}/{pid}{ext}"
@@ -585,6 +588,29 @@ def get_file_info(file_path: str):
     return(pid,parent,file,dir,ext)
 
 
+def add_update_dataframe(df, pid: str, row_data, file_name: str):
+    if (value_exists_in_column(df,'id',pid)):
+        logger.info(f"Updating Dataframe: {pid},{file_name}")
+        updated_df,success,msg = update_dataframe(df, 'id', pid, row_data)
+        if not (success):
+            logger.warning(f"Update DataFrame: Failed for PID: {pid} - {msg}")
+            print(f"Update DataFrame: failed for PID: {pid}")
+            return df
+        else:
+            logger.info(f"Updating DataFrame: Success for PID: {pid}")
+            return updated_df
+    else:
+        logger.info(f"Adding to Dataframe: {pid},{file_name}")
+        updated_df,success,msg = add_row_to_dataframe(df,row_data,key_column='id')
+        if not (success):
+            logger.warning(f"Adding to DataFrame: Failed for PID: {pid} - {msg}")
+            print(f"Added to DataFrame: Failed for PID: {pid}")
+            return df
+        else:
+            logger.info(f"Adding to DataFrame: Success for PID: {pid}")
+            return updated_df
+
+
 def process_object(file_type: str, file_path: str, parent: str, df):
     #logger.info(f"Processing an object.")
     # object files are kept within a folder of the top level folder.
@@ -597,7 +623,7 @@ def process_object(file_type: str, file_path: str, parent: str, df):
 
     # Process File...
     if (file_type == "File" ) and ( parent != "" ):
-        print(f"Processing File")
+        #print(f"Processing File")
         ignore_file_list = ["target.tif","manifest.csv","manifest.xlsx","manifest.xls"]
 
         dir,ext = os.path.splitext(file_path)
@@ -608,134 +634,80 @@ def process_object(file_type: str, file_path: str, parent: str, df):
             logger.info(f"Processing TIFF: {file_path}")
             print(f"Processing TIFF: {file_path}")
             outpid,outfile = process_tiff(file_path)
+            row_data = {'id': outpid, 'file': outfile}
+            updated_df = add_update_dataframe(df,outpid,row_data,outfile)
+            return updated_df
 
-            if (value_exists_in_column(df,'id',outpid)):
-                # Update existing info.
-                logger.info(f"Updating Dataframe: {outpid},{outfile}")
-
-                # Set Row Data.
-                row_data = {'id': outpid, 'file': outfile}
-
-                # Update the DataFrame.
-                updated_df,success,msg = update_dataframe(df, 'id', outpid, row_data)
-
-                if not (success):
-                    logger.warning(f"Update DataFrame: Failed for PID: {outpid} - {msg}")
-                    print(f"Update DataFrame: failed for PID: {outpid}")
-                else:
-                    return updated_df
-
-            else:
-                # Add new info.
-                logger.info(f"Adding to Dataframe: {outpid},{outfile}")
-
-                # Set Row Data.
-                row_data = {'id': outpid, 'file': outfile}
-
-                # Update the dataframe.
-                updated_df,success,msg = add_row_to_dataframe(df,row_data,key_column='id')
-
-                if not (success):
-                    logger.warning(f"Adding to Dataframe: Failed for PID: {outpid} - {msg}")
-                    print(f"Add to DataFrame: failed for PID: {outpid}")
-                else:
-                    return updated_df
+            #if (value_exists_in_column(df,'id',outpid)):
+            #    # Update existing info.
+            #    logger.info(f"Updating Dataframe: {outpid},{outfile}")
+            #
+            #    # Set Row Data.
+            #    row_data = {'id': outpid, 'file': outfile}
+            #
+            #    # Update the DataFrame.
+            #    updated_df,success,msg = update_dataframe(df, 'id', outpid, row_data)
+            #
+            #    if not (success):
+            #        logger.warning(f"Update DataFrame: Failed for PID: {outpid} - {msg}")
+            #        print(f"Update DataFrame: failed for PID: {outpid}")
+            #    else:
+            #        return updated_df
+            #
+            #else:
+            #    # Add new info.
+            #    logger.info(f"Adding to Dataframe: {outpid},{outfile}")
+            #
+            #    # Set Row Data.
+            #    row_data = {'id': outpid, 'file': outfile}
+            #
+            #    # Update the dataframe.
+            #    updated_df,success,msg = add_row_to_dataframe(df,row_data,key_column='id')
+            #
+            #    if not (success):
+            #        logger.warning(f"Adding to Dataframe: Failed for PID: {outpid} - {msg}")
+            #        print(f"Add to DataFrame: failed for PID: {outpid}")
+            #    else:
+            #        return updated_df
 
         # Other types of files...
         elif ( ext == ".mp3" ):
             logger.info(f"Processing MP3: {file_path}")
             print(f"Procesing MP3: {file_path}")
             outpid,outfile = process_mp3(file_path)
+            row_data = {'id': outpid, 'file': outfile}
+            updated_df = add_update_dataframe(df,outpid,row_data,outfile)
+            return updated_df
 
-            if (value_exists_in_column(df,'id',outpid)):
-                # Update existing info.
-                logger.info(f"Updating Dataframe: {outpid},{outfile}")
+        elif (( ext == ".vtt" ) or ( ext == ".srt" )):
+            logger.info(f"Processing WebVTT/SRT: {file_path}")
+            print(f"Processing WebVTT/SRT: {file_path}")
+            outpid,outfile = process_transcript(file_path)
+            row_data = {'id': outpid, 'transcript': outfile}
+            updated_df = add_update_dataframe(df,outpid,row_data,outfile) 
+            return updated_df
 
-                # Set Row Data.
-                row_data = {'id': outpid, 'file': outfile}
-
-                # Update the DataFrame.
-                updated_df,success,msg = update_dataframe(df, 'id', outpid, row_data)
-
-                if not (success):
-                    logger.warning(f"Update DataFrame: Failed for PID: {outpid} - {msg}")
-                    print(f"Update DataFrame: failed for PID: {outpid}")
-                else:
-                    return updated_df
-
-            else:
-                # Add new info.
-                logger.info(f"Adding to Dataframe: {outpid},{outfile}")
-
-                # Set Row Data.
-                row_data = {'id': outpid, 'file': outfile}
-
-                # Update the dataframe.
-                updated_df,success,msg = add_row_to_dataframe(df,row_data,key_column='id')
-
-                if not (success):
-                    logger.warning(f"Adding to Dataframe: Failed for PID: {outpid} - {msg}")
-                    print(f"Add to DataFrame: failed for PID: {outpid}")
-                else:
-                    return updated_df
-
-            #return df
-            # More to do here.
-    
-        elif ( ext == ".vtt" ):
-            logger.info(f"Processing WebVTT: {file_path}")
-            print(f"Processing WebVTT: {file_path}")
-            outpid,outfile = process_vtt(file_path)
-            return df
-            # More to do here.
-
-        elif ( ext == ".srt" ):
-            print(f"Processing SRT.")
-            outpid,outfile = process_srt(file_path)
-            return df
-            # More to do here.
+        elif (( ext == ".jpg" ) or ( ext == ".png" )):
+            logger.info(f"Processing Thumbnail: {file_path}")
+            print(f"Processing Thumbnail: {file_path}")
+            outpid,outfile = process_thumbnail(file_path)
+            row_data = {'id': outpid, 'thumbnail': outfile}
+            updated_df = add_update_dataframe(df,outpid,row_data,outfile)
+            return updated_df
 
         else:
+            logger.info(f"Processing Unknown: {file_path}")
             print(f"Unknown File extension: {ext} - Skipping.")
             outpid,outfile = process_unknown(file_path)
-
-            if (value_exists_in_column(df,'id',outpid)):
-                # Update existing info.
-                logger.info(f"Updating Dataframe: {outpid},{outfile}")
-
-                # Set Row Data.
-                row_data = {'id': outpid, 'file': outfile}
-
-                # Update the DataFrame.
-                updated_df,success,msg = update_dataframe(df, 'id', outpid, row_data)
-
-                if not (success):
-                    logger.warning(f"Update DataFrame: Failed for PID: {outpid} - {msg}")
-                    print(f"Update DataFrame: failed for PID: {outpid}")
-                else:
-                    return updated_df
-
-            else:
-                # Add new info.
-                logger.info(f"Adding to Dataframe: {outpid},{outfile}")
-
-                # Set Row Data.
-                row_data = {'id': outpid, 'file': outfile}
-
-                # Update the dataframe.
-                updated_df,success,msg = add_row_to_dataframe(df,row_data,key_column='id')
-
-                if not (success):
-                    logger.warning(f"Adding to Dataframe: Failed for PID: {outpid} - {msg}")
-                    print(f"Add to DataFrame: failed for PID: {outpid}")
-                else:
-                    return updated_df
+            row_data = {'id': outpid, 'file': outfile}
+            updated_df = add_update_dataframe(df,outpid,row_data,outfile)
+            return updated_df
 
 
     # Process Top Level file...
     elif (file_type == "File") and (parent == ""):
         # Top Level file.
-        print(f"Processing Top-Level File")
+        #print(f"Processing Top-Level File")
         ignore_file_list = ["ignore"]
         if file_path.casefold() in ignore_file_list:
             logger.info(f"Ingoring: {file_path}")
@@ -749,52 +721,45 @@ def process_object(file_type: str, file_path: str, parent: str, df):
                 logger.info(f"Processing Top Level TIFF: {file_path}")
                 print(f"Processing Top Level TIFF: {file_path}")
                 outpid,outfile = process_tiff(file_path)
-                print(f"outpid: {outpid}")
+                row_data = {'id': pid, 'file': outfile}
+                updated_df = add_update_dataframe(df,pid,row_data,outfile)
+                return updated_df
 
-                if (value_exists_in_column(df,'id',pid)):
-                    # Update Existing info.
-                    print(f"Found: {pid} in Google Sheet")
-                    logger.info(f"Found: {pid} in Google Sheet")
+            elif ( ext == ".mp3" ):
+                logger.info(f"Processing MP3: {file_path}")
+                print(f"Procesing MP3: {file_path}")
+                outpid,outfile = process_mp3(file_path)
+                row_data = {'id': pid, 'file': outfile}
+                updated_df = add_update_dataframe(df,pid,row_data,outfile)
+                return updated_df
 
-                    # Set Row Data
-                    row_data = {'id': pid, 'file': outfile}
+            elif (( ext == ".vtt" ) or ( ext == ".srt" )):
+                logger.info(f"Processing WebVTT/SRT: {file_path}")
+                print(f"Processing WebVTT/SRT: {file_path}")
+                outpid,outfile = process_transcript(file_path)
+                row_data = {'id': pid, 'transcript': outfile}
+                updated_df = add_update_dataframe(df,pid,row_data,outfile)
+                return updated_df
 
-                    # Update the dataframe.
-                    logger.info(f"Updating DataFrame: {pid}")
-                    #updated_df,success,msg = update_dataframe(df, 'id', pid, row_data)
-                    df,success,msg = update_dataframe(df, 'id', pid, row_data)
+            elif (( ext == ".jpg" ) or ( ext == ".png" )):
+                logger.info(f"Processing Thumbnail: {file_path}")
+                print(f"Processing Thumbnail: {file_path}")
+                outpid,outfile = process_thumbnail(file_path)
+                row_data = {'id': pid, 'thumbnail': outfile}
+                updated_df = add_update_dataframe(df,pid,row_data,outfile)
+                return updated_df
 
-                    if not (success):
-                        logger.warning(f"Update DataFrame: Failed for PID: {pid} - {msg}")
-                        print(f"Update DataFrame: Failed for PID: {pid} - {msg}")
-                    else:
-                        return df
-                else:
-                    # Add new info.
-                    print(f"Not Found: Adding {pid} to Google Sheet")
-                    logger.info(f"Not Found: Adding {pid} to Google Sheet")
-
-                    # Set Row Data.
-                    row_data = {'id': pid,'file': outfile}
-
-                    # Update the dataframe.
-                    logger.info(f"Updating DataFrame: {pid}")
-                    print(f"Adding: {row_data}")
-                    #updated_df,success,msg = add_row_to_dataframe(df,row_data,key_column='id')
-                    df,success,msg = add_row_to_dataframe(df,row_data,'id')
-
-                    if not (success):
-                        logger.warning(f"Add to DataFrame: failed for PID: {pid} - {msg}")
-                        print(f"Add to DataFrame: Failed for PID: {pid} - {msg}")
-                    else:
-                        return df
             else:
-                # Top Level file is not a .tif file"...
-                return df
+                logger.info(f"Processing Unknown: {file_path}")
+                print(f"Unknown File extension: {ext} - Skipping.")
+                outpid,outfile = process_unknown(file_path)
+                row_data = {'id': pid, 'file': outfile}
+                updated_df = add_update_dataframe(df,pid,row_data,outfile)
+                return updated_df
 
     # Process Directory... 
     elif (file_type == "Directory"):
-        print(f"Processing Directory")
+        #print(f"Processing Directory")
         ignore_dir_list = ["ignore"]
         if file_path.casefold() in ignore_dir_list:
             logger.info(f"Ignoreing: {file_path}")
@@ -827,8 +792,8 @@ def process_object(file_type: str, file_path: str, parent: str, df):
 
             else:
                 # Add new info.
-                print(f"Not Found: Adding {pid} to Google Sheet")
-                logger.info(f"Not Found: Adding {pid} to Google Sheet")
+                print(f"Not Found: Adding {pid} to DataFrame")
+                logger.info(f"Not Found: Adding {pid} to DataFrame")
 
                 # Set Row Data.
                 row_data = {'id': pid}
@@ -852,11 +817,12 @@ def process_object(file_type: str, file_path: str, parent: str, df):
 
 def process_objects(data,directory,df):
 
-    print(f"process_objects: Input DataFrame:")
-    print(df)
+    #print(f"process_objects: Input DataFrame:")
+    #print(df)
 
     # Begin Processing the listing of the directory.
     logger.info(f"Processing file data.")
+    print(f"Processing the directory: {directory}")
 
     # Loop through the listing.
     for row, (file_name, file_type, file_path) in enumerate(data, start=2):
@@ -870,23 +836,25 @@ def process_objects(data,directory,df):
             parent = parent.replace("/"+file_name, "")
             parent = parent.replace("/","")
 
-            print(f"File_type: {file_type}")
-            print(f"File_Path: {file_path}")
-            print(f"Parent:    {parent}")
+            #print(f"File_type: {file_type}")
+            #print(f"File_Path: {file_path}")
+            #print(f"Parent:    {parent}")
 
             df = process_object(file_type,file_path,parent,df)
 
         print(f"\n")
 
-    # Display the Dataframe before sending it to Google Sheets.
-    print(f"process_objects: Output Dataframe:")
-    print(df)
+    # Display the DataFrame before sending it to Google Sheets.
+    #print(f"Result Dataframe:")
+    #print(df)
 
-    # Save off the df to Google Sheets.
+    # Save the DataFrame to Google Sheets.
+    logger.info(f"Updating Google Sheet with DataFrame.")
+    print(f"Updating Google Sheet with DataFrame.")
     success,msg = update_google_sheet(df, google_sheet_id, google_sheet_name, google_credentials)
     if (success):
-        logger.info(f"Updated Google Sheet.")
-        print(f"Updated Google Sheet")
+        logger.info(f"Successfully Updated Google Sheet.")
+        print(f"Successfully Updated Google Sheet.")
     else:
         logger.warning(f"Failed to update Google Sheet: {msg}")
         print(f"Failed to update Google Sheet: {msg}")

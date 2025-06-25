@@ -924,9 +924,6 @@ def main():
     exit()
 
 
-# Define a global dataframe.
-#df = pd.DataFrame()
-
 # Setup global variables.
 google_credentials = None
 google_sheet_id = None

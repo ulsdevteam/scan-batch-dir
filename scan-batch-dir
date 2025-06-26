@@ -15,9 +15,6 @@ import pandas as pd
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# import from functions.py
-#from functions import *
-
 # Setup the log file format.
 log_formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
 
@@ -230,6 +227,18 @@ def update_google_sheet(df: pd.DataFrame, spreadsheet_id: str, sheet_name: str, 
         return False, f"An error occurred: {str(e)}"
 
 def update_dataframe(df: pd.DataFrame, match_column: str, match_value: str, update_dict):
+    """
+    Updates a pandas dataframe with a dictionary given the match column and value..
+
+    Args:
+        df (pandas.DataFrame): The DataFrame containing updated data.
+        match_column (str): 
+        match_value (str):
+        update_dict (dict):
+
+    Returns:
+        tuple: dataframe, success status, and a message.
+    """
     try:
         # Verify input is a DataFrame
         if not isinstance(df, pd.DataFrame):
@@ -328,7 +337,6 @@ def value_exists_in_column(df, column_name, value):
     Returns:
         bool: True if the value exists, False otherwise.
     """
-
     try:
         # Check if the column exists in the DataFrame
         if column_name not in df.columns:
@@ -417,6 +425,12 @@ def is_valid_dataframe(df: pd.DataFrame) -> bool:
 
 
 def parse_arguments():
+    """
+    Parses the command line arguments to the script.
+
+    Returns:
+        args: A dictionary arguments.
+    """
     parser = argparse.ArgumentParser(
         description='Migrate media from Islandora 7 to PeerTube.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -438,6 +452,17 @@ def parse_arguments():
     return args
 
 def process_tiff(file_path:str):
+    """
+    Processes a TIFF (.tif) file and converts it to a JP2 (.jp2) file.
+    
+    Args:
+        file_path (str) The path to incoming TIFF file.
+
+    Returns:
+        out_pid  (str) The PID of the resulting JP2 file.
+        jp2_path (str) The path to the resulting JP2 file.
+
+    """
     # Process a .tif file.
     #print(f"Processing a TIFF file: {file_path}.")
     pid,parent,file,dir,ext = get_file_info(file_path)
@@ -455,6 +480,16 @@ def process_tiff(file_path:str):
     return out_pid,jp2_path
 
 def process_mp3(file_path:str):
+    """
+    Determines the pid and resulting mp3_path of passed in file_path.
+
+    Args:
+        file_path (str) The path to the incoming MP3 file.
+
+    Returns:
+        out_pid  (str) The PID of the MP3 file.
+        mp3_path (str) The Path to the MP3 file.
+    """
     # Process a .mp3 file.
     #print(f"Processing a MP3 file: {file_path}.")
     pid,parent,file,dir,ext = get_file_info(file_path)
@@ -464,6 +499,16 @@ def process_mp3(file_path:str):
     return out_pid,mp3_path
 
 def process_transcript(file_path:str):
+    """
+    Determines the pid and path to the transcript file.
+
+    Args:
+        file_path (str) The path to the incoming Transcript.
+
+    Returns:
+        out_pid  (str) The PID of the Transcript file.
+        vtt_path (str) The Path to the Transcript file.
+    """
     # Process a .vtt or .srt file.
     #print(f"Processing a WebVTT/SRT file: {file_path}.")
     pid,parent,file,dir,ext = get_file_info(file_path)
@@ -473,6 +518,16 @@ def process_transcript(file_path:str):
     return out_pid,vtt_path
 
 def process_thumbnail(file_path:str):
+    """
+    Determine the pid and path to the thumbnail file.
+    
+    Args:
+        file_path (str) The path to the incoming thumbnail.
+
+    Returns:
+        out_pid  (str) The PID of the thumbnail file.
+        tn_path  (str) the Path to the thumbnail file.
+    """
     # Process a thumbnail (.jpg/.png).
     #print(f"Processing a Thumbnail file: {file_path}.")
     pid,parent,file,dir,ext = get_file_info(file_path)
@@ -482,6 +537,16 @@ def process_thumbnail(file_path:str):
     return out_pid,tn_path
 
 def process_unknown(file_path:str):
+    """
+    Determine the pid and path to the unknown file.
+
+    Args:
+        file_path (str) the path to the incoming unknown file.
+
+    Returns:
+        out_pid  (str) The PId of the unknown file.
+        unknown_path (str) The path to the unknown file.
+    """
     # Process a unknown file.
     #print(f"Processing an Unknown file: {file_path}.")
     pid,parent,file,dir,ext = get_file_info(file_path)
@@ -492,6 +557,19 @@ def process_unknown(file_path:str):
 
 
 def get_file_info(file_path: str):
+    """
+    Obtain information about the file_path file.
+
+    Args:
+        file_path (str) The Path to the file.
+
+    Returns:
+        pid     (str) The PID of the file.
+        parent  (str) The parent directory of the file.
+        file    (str) The filename and extension of the file.
+        dir     (str) The directory that the file is located in.
+        ext     (str) The file extension of the file.
+    """
     dir,ext = os.path.splitext(file_path)   # Split the file_path into directory and extension.
     file_name = os.path.basename(dir)       # Get the file_name of the object which will usually be the pid.
     pid = file_name                         # Assign pid to the last piece of the directory.
@@ -503,6 +581,19 @@ def get_file_info(file_path: str):
 
 
 def add_update_dataframe(df, pid: str, row_data, file_name: str):
+    """
+    Depending upon if the pid exists in the 'id' column of the dataframe
+    either add or update the row to the dataframe.
+
+    Args:
+        df (DataFrame)  The Pandas Dataframe to work with.
+        pid (str)       The PID to find in the DataFrame 'id' column.
+        row_data (dict) The row data to add/update the row with.
+        file_name (str) The file_name of the file we are working with.
+
+    Returns:
+        df (DataFrame)  The updated DataFrame.
+    """
     if (value_exists_in_column(df,'id',pid)):
         logger.info(f"Updating Dataframe: {pid},{file_name}")
         updated_df,success,msg = update_dataframe(df, 'id', pid, row_data)
@@ -526,6 +617,18 @@ def add_update_dataframe(df, pid: str, row_data, file_name: str):
 
 
 def process_object(file_type: str, file_path: str, parent: str, df):
+    """
+    Process the incoming file object.
+
+    Args:
+        file_type (str) The type of object ('File','Directory')
+        file_path (str) The file_path to the object.
+        parent    (str) The parent directory of the object.
+        df (DataFrame)  The Pandas DataFrame we will be updating.
+
+    Returns:
+        df (DataFrame)  The Updated Pandas DataFrame.
+    """
     #logger.info(f"Processing an object.")
     # object files are kept within a folder of the top level folder.
     # files are .tif files which need to be converted.
@@ -730,7 +833,17 @@ def process_object(file_type: str, file_path: str, parent: str, df):
 
 
 def process_objects(data,directory,df):
+    """
+    Process a list of objects
 
+    Args:
+        data (list of tupples) The result of scan_directory.
+        directory (str) The full directory path that we will be working with.
+        df (DataFrame)  The Pandas DataFrame that we will be working with.
+
+    Returns:
+        N/a.
+    """
     #print(f"process_objects: Input DataFrame:")
     #print(df)
 
@@ -775,6 +888,16 @@ def process_objects(data,directory,df):
 
 
 def main():
+    """
+    Main Process that sets up the environment variables etc and kicks off
+    the process_objects loop.
+
+    Args:
+        N/a
+
+    Returns:
+        N/a
+    """
     # Setup the log file format.
     globals()['log_formatter'] = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
 

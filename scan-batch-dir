@@ -363,76 +363,6 @@ def scan_directory(directory):
     return result
 
 
-def read_csv(csv_file):
-    """
-    Read a csv file.
-
-    Args:
-        csv_file (str): Path to a CSV file.
-
-    Returns:
-        data frame (df): A Pandas data frame.
-    """
-    try:
-        df = pd.read_csv(csv_file)
-    except FileNotFoundError:
-        print(f"Error: The file '{csv_file}' was not found.")
-    except pd.errors.EmptyDataError:
-        print(f"Error: The file '{csv_file}' is empty.")
-    except pd.errors.ParserError as e:
-        print(f"Error: An error occurred while parsing the file '{csv_file}' - {e}.")
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-    return df
-
-
-def write_csv(df,csv_file):
-    """
-    Write a csv file.
-
-    Args:
-        df (Pandas data frame): Dataframe containing the data to write out.
-        csv_file (str): A full path to the resulting CSV file.
-    """
-    try:
-        df.to_csv(csv_file, index=False)
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-
-def update_csv(df,update_column,condition_column,condition_value,new_value):
-    """
-    Updates a column field in a pandas dataframe based on another column field.
-
-    Args:
-        df (pandas dataframe): pandas dataframe
-        update_column (str): Name of the column to update.
-        condition_column (str): Name of the column to check the condition
-        condition_value (str): Value to check in the condition column.
-        new_value (str): New value to update in the update column.
-
-    Returns:
-        None
-    """
-
-    #print(f"Updating: {condition_column}:{condition_value} field {update_column} with {new_value}")
-
-    try:
-        if update_column not in df.columns or condition_column not in df.columns:
-            print(f"Error: {update_column} does not exist in the CSV.")
-            #raise ValueError("Invalid column name")
-
-        if condition_value not in df[condition_column].values:
-            print(f"Error: {condition_column}:{condition_value} does not exist in CSV.")
-            #raise ValueError("Condition value not found is not in the manifest.csv")
-
-        df.loc[df[condition_column] == condition_value, update_column] = new_value
-
-    except ValueError as e:
-        print(f"Error: {e}")
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-    
-
 def convert_tiff_to_jp2(tif_file_path, jp2_file_path):
     """
     Converts a tif file to a jp2 file using the 'gm convert' command.
@@ -485,23 +415,6 @@ def is_valid_dataframe(df: pd.DataFrame) -> bool:
     """
     return isinstance(df, pd.DataFrame) # and not df.empty
 
-
-def validate_spreadsheet(csv_file):
-    required_columns = ['id','title','file','parent_id']
-
-    # Read the CSV file.
-    df = pd.read_csv(csv_file)
-
-    # Check for the columns.
-    for column_name in required_columns:
-        if not column_name in df.columns:
-            print(f"Required column {column_name} is missing in the CSV {csv_file} - adding it: {column_name}.")
-            # add the required column
-            if column_name == 'file':
-                df[column_name] = None
-
-    # Write the CSV file.
-    #write_csv(df,csv_file) 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(

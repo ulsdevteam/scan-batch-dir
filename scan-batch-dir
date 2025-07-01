@@ -407,7 +407,7 @@ def convert_tiff_to_jp2(tif_file_path, jp2_file_path):
     try:
         result = subprocess.run(args, capture_output=True, text=True)
         if (result.returncode == 0):
-            logger.info(f"Successfully converted TIFF to JP2 on file: {tif_file_path}")
+            logger.info(f"Successfully converted TIFF to JP2: {tif_file_path}")
     except Exception as e:
         raise Exception(f"Failed to convert TIFF to JP2: {str(e)}")
 
@@ -474,8 +474,8 @@ def process_tiff(file_path:str):
 
     logger.info(f"Tiff: Creating JP2: {jp2_path}")
     print(f"Tiff: Creating JP2: {jp2_path} from {file_path}")
-    #if not os.path.exists(jp2_path):
-    #    convert_tiff_to_jp2(file_path, jp2_path)
+    if not os.path.exists(jp2_path):
+        convert_tiff_to_jp2(file_path, jp2_path)
 
     return out_pid,jp2_path
 

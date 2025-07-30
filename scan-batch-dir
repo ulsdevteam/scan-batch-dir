@@ -449,6 +449,37 @@ def is_valid_image(image_path):
             return False
 
 
+def is_valid_filesize(x_bytes,file_path):
+    """
+    Checks if a file's size is larger than a specified number of bytes.
+
+    Note: Minimum file sizes for:
+    .tif file = 72 bytes
+    .jp2 file = 134 bytes
+    .pdf file = 67 bytes
+    .mp3 file = 36 bytes
+
+    Args:
+        x_bytes (int): The threshold size in bytes.
+        file_path (str): The path to the file.
+
+    Returns:
+        bool: True if the file size is larger than x_bytes, False otherwise.
+    """
+    if not os.path.exists(file_path):
+        logger.error(f"Error: File not found at {file_path}")
+        return False
+
+    file_size = os.path.getsize(file_path)
+
+    if file_size > x_bytes:
+        logger.info(f"Filesize of (file_path) is greater than {x_bytes}.")
+        return True
+    else:
+        logger.error(f"Filesize of {file_path} is smaller than or equal to {x_bytes} - indicating an invalid file."
+        return False
+
+
 def is_valid_dataframe(df: pd.DataFrame) -> bool:
     """
     Determines if a DataFrame is valid (not empty and of correct type).

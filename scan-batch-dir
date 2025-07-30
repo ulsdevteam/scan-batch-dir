@@ -411,6 +411,44 @@ def convert_tiff_to_jp2(tif_file_path, jp2_file_path):
     except Exception as e:
         raise Exception(f"Failed to convert TIFF to JP2: {str(e)}")
 
+def is_valid_image(image_path):
+    """
+        Checks an image file for corruption using GraphicsMagick's identify command.
+
+        Args:
+            image_path (str): The path to the image file.
+
+        Returns:
+            bool: True if the image appears to be valid, False if corrupted or invalid.
+        """
+        if not os.path.exists(image_path):
+            logger.error(f"Error: Image File not found at {image_path}")
+            return False
+
+        try:
+            # -regard-warnings ensures that warnings are treated as errors,
+            # leading to a non-zero exit code for issues.
+            result = subprocess.run(
+                ['/usr/bin/gm', 'identify', '-regard-warnings', image_path],
+                capture_output=True,
+                text=True,
+                check=False  # Do not raise an exception for non-zero exit codes
+            )
+
+            if result.returncode != 0:
+                logger.warning(f"Corruption detected in {image_path}:")
+                logger.warning(f"Image error: {result.stderr}")
+                return False
+            else:
+                return True
+        except FileNotFoundError:
+            logger.warning(f"Error: GraphicsMagick (gm) not found. Please ensure it is installed and in your PATH.")
+            return False
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}")
+            return False
+
+
 def is_valid_dataframe(df: pd.DataFrame) -> bool:
     """
     Determines if a DataFrame is valid (not empty and of correct type).

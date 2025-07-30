@@ -720,43 +720,11 @@ def process_object(file_type: str, file_path: str, parent: str, df):
             logger.info(f"Processing TIFF: {file_path}")
             print(f"Processing TIFF: {file_path}")
             outpid,outfile = process_tiff(file_path)
-            row_data = {'id': outpid, 'file': outfile}
-            updated_df = add_update_dataframe(df,outpid,row_data,outfile)
-            return updated_df
+            if ((is_valid_image(file_path) and is_valid_filesize(134,file_path) and is_valid_image(outfile) and is_valid_filesize(134,outfile)):
+                row_data = {'id': outpid, 'file': outfile}
+                updated_df = add_update_dataframe(df,outpid,row_data,outfile)
+                return updated_df
 
-            #if (value_exists_in_column(df,'id',outpid)):
-            #    # Update existing info.
-            #    logger.info(f"Updating Dataframe: {outpid},{outfile}")
-            #
-            #    # Set Row Data.
-            #    row_data = {'id': outpid, 'file': outfile}
-            #
-            #    # Update the DataFrame.
-            #    updated_df,success,msg = update_dataframe(df, 'id', outpid, row_data)
-            #
-            #    if not (success):
-            #        logger.warning(f"Update DataFrame: Failed for PID: {outpid} - {msg}")
-            #        print(f"Update DataFrame: failed for PID: {outpid}")
-            #    else:
-            #        return updated_df
-            #
-            #else:
-            #    # Add new info.
-            #    logger.info(f"Adding to Dataframe: {outpid},{outfile}")
-            #
-            #    # Set Row Data.
-            #    row_data = {'id': outpid, 'file': outfile}
-            #
-            #    # Update the dataframe.
-            #    updated_df,success,msg = add_row_to_dataframe(df,row_data,key_column='id')
-            #
-            #    if not (success):
-            #        logger.warning(f"Adding to Dataframe: Failed for PID: {outpid} - {msg}")
-            #        print(f"Add to DataFrame: failed for PID: {outpid}")
-            #    else:
-            #        return updated_df
-
-        # Other types of files...
         elif ( ext == ".mp3" ):
             logger.info(f"Processing MP3: {file_path}")
             print(f"Procesing MP3: {file_path}")

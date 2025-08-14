@@ -413,41 +413,40 @@ def convert_tiff_to_jp2(tif_file_path, jp2_file_path):
 
 def is_valid_image(image_path):
     """
-        Checks an image file for corruption using GraphicsMagick's identify command.
+    Checks an image file for corruption using GraphicsMagick's identify command.
 
-        Args:
-            image_path (str): The path to the image file.
+    Args:
+        image_path (str): The path to the image file.
 
-        Returns:
-            bool: True if the image appears to be valid, False if corrupted or invalid.
-        """
-        if not os.path.exists(image_path):
-            logger.error(f"Error: Image File not found at {image_path}")
+    Returns:
+        bool: True if the image appears to be valid, False if corrupted or invalid.
+    """
+    if not os.path.exists(image_path):
+        logger.error(f"Error: Image File not found at {image_path}")
+        return False
+
+    try:
+        # -regard-warnings ensures that warnings are treated as errors,
+        # leading to a non-zero exit code for issues.
+        result = subprocess.run(
+            ['/usr/bin/gm', 'identify', '-regard-warnings', image_path],
+            capture_output=True,
+            text=True,
+            check=False  # Do not raise an exception for non-zero exit codes
+        )
+
+        if result.returncode != 0:
+            logger.warning(f"Corruption detected in {image_path}:")
+            logger.warning(f"Image error: {result.stderr}")
             return False
-
-        try:
-            # -regard-warnings ensures that warnings are treated as errors,
-            # leading to a non-zero exit code for issues.
-            result = subprocess.run(
-                ['/usr/bin/gm', 'identify', '-regard-warnings', image_path],
-                capture_output=True,
-                text=True,
-                check=False  # Do not raise an exception for non-zero exit codes
-            )
-
-            if result.returncode != 0:
-                logger.warning(f"Corruption detected in {image_path}:")
-                logger.warning(f"Image error: {result.stderr}")
-                return False
-            else:
-                return True
-        except FileNotFoundError:
-            logger.warning(f"Error: GraphicsMagick (gm) not found. Please ensure it is installed and in your PATH.")
-            return False
-        except Exception as e:
-            logger.error(f"An unexpected error occurred: {e}")
-            return False
-
+        else:
+            return True
+    except FileNotFoundError:
+        logger.warning(f"Error: GraphicsMagick (gm) not found. Please ensure it is installed and in your PATH.")
+        return False
+    except Exception as e:
+        logger.error(f"An unexpected error occurred: {e}")
+        return False
 
 def is_valid_filesize(x_bytes,file_path):
     """
@@ -476,7 +475,7 @@ def is_valid_filesize(x_bytes,file_path):
         logger.info(f"Filesize of (file_path) is greater than {x_bytes}.")
         return True
     else:
-        logger.error(f"Filesize of {file_path} is smaller than or equal to {x_bytes} - indicating an invalid file."
+        logger.error(f"Filesize of {file_path} is smaller than or equal to {x_bytes} - indicating an invalid file.")
         return False
 
 
@@ -720,7 +719,7 @@ def process_object(file_type: str, file_path: str, parent: str, df):
             logger.info(f"Processing TIFF: {file_path}")
             print(f"Processing TIFF: {file_path}")
             outpid,outfile = process_tiff(file_path)
-            if ((is_valid_image(file_path) and is_valid_filesize(134,file_path) and is_valid_image(outfile) and is_valid_filesize(134,outfile)):
+            if (is_valid_image(file_path) and is_valid_filesize(134,file_path) and is_valid_image(outfile) and is_valid_filesize(134,outfile)):
                 row_data = {'id': outpid, 'file': outfile}
                 updated_df = add_update_dataframe(df,outpid,row_data,outfile)
                 return updated_df

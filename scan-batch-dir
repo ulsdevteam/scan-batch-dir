@@ -429,7 +429,7 @@ def is_valid_image(image_path):
         # -regard-warnings ensures that warnings are treated as errors,
         # leading to a non-zero exit code for issues.
         result = subprocess.run(
-            ['/usr/bin/gm', 'identify', '-regard-warnings', image_path],
+            ['/usr/bin/gm', 'identify', image_path],
             capture_output=True,
             text=True,
             check=False  # Do not raise an exception for non-zero exit codes
@@ -648,7 +648,7 @@ def get_file_info(file_path: str):
     return(pid,parent,file,dir,ext)
 
 
-def add_update_dataframe(df, pid: str, row_data, file_name: str):
+def add_update_dataframe(df: pd.DataFrame, pid: str, row_data, file_name: str):
     """
     Depending upon if the pid exists in the 'id' column of the dataframe
     either add or update the row to the dataframe.

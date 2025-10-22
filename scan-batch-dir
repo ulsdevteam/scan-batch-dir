@@ -136,6 +136,8 @@ def read_google_sheet(spreadsheet_id: str, sheet_name="Sheet1", credentials_file
     """
     try:
         # Build the service
+        logger.info(f"Connecting to Google Sheet using credentials file: {credentials_file}")
+        logger.info(f"SheetID: {spreadsheet_id}, Sheet Name: {sheet_name}")
         service = connect_to_google_sheet(credentials_file);
 
         # Call the Sheets API
@@ -684,7 +686,7 @@ def add_update_dataframe(df: pd.DataFrame, pid: str, row_data, file_name: str):
             return updated_df
 
 
-def process_object(file_type: str, file_path: str, parent: str, df):
+def process_object(file_type: str, file_path: str, parent: str, df: pd.DataFrame):
     """
     Process the incoming file object.
 
@@ -692,10 +694,10 @@ def process_object(file_type: str, file_path: str, parent: str, df):
         file_type (str) The type of object ('File','Directory')
         file_path (str) The file_path to the object.
         parent    (str) The parent directory of the object.
-        df (DataFrame)  The Pandas DataFrame we will be updating.
+        df (pd.DataFrame)  The Pandas DataFrame we will be updating.
 
     Returns:
-        df (DataFrame)  The Updated Pandas DataFrame.
+        df (pd.DataFrame)  The Updated Pandas DataFrame.
     """
     #logger.info(f"Processing an object.")
     # object files are kept within a folder of the top level folder.
@@ -868,7 +870,7 @@ def process_object(file_type: str, file_path: str, parent: str, df):
         exit()
 
 
-def process_objects(data,directory,df):
+def process_objects(data, directory: str, df: pd.DataFrame):
     """
     Process a list of objects
 
@@ -887,7 +889,7 @@ def process_objects(data,directory,df):
     logger.info(f"Processing file data.")
     print(f"Processing the directory: {directory}")
 
-    # Loop through the listing.
+    # Loop through the file listing.
     for row, (file_name, file_type, file_path) in enumerate(data, start=2):
         # Skip things we don't want to include.
         if (( file_name == "target.tif" ) or ( file_name == "manifest.csv" ) or ( file_name == "manifest.xlsx" )):

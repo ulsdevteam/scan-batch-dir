@@ -823,7 +823,7 @@ def process_file(df, file_path: str, level):
 
         # Get the field_model from JSONAPI
         field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',imodel)
-        logger.info(f"File is model: {my_model}, TID: {field_model}")
+        logger.info(f"File is model: {imodel}, TID: {field_model}")
 
         # Process any .tif files.
         if (file_ext.lower() == ".tif"):
@@ -985,6 +985,8 @@ def process_file(df, file_path: str, level):
                 'field_weight': file_weight,
                 'field_model': field_model,
                 'model': imodel,
+                'field_resource_type': resource_type,
+                'level': level,
             }
 
             logger.info(f"Row Data: {row_data}")
@@ -995,6 +997,29 @@ def process_file(df, file_path: str, level):
         # Process any simple image files.
         if (file_ext.lower() == ".png" or file_ext.lower() == ".jpg"):
             print(f"  Type: Simple Image")
+        
+            # Handle Top Level files.
+            if not level == 1:
+                pid = f"{parent_folder}-{file_name}"
+            else:
+                pid = f"{file_name}"
+
+            # Build Row Data.
+            row_data = {
+                'id':   pid,
+                'file': file_path,
+                'field_weight': file_weight,
+                'field_model': field_model,
+                'model': imodel,
+                'field_resource_type': resource_type,
+                'level': level,
+            }
+
+            logger.info(f"Row Data: {row_data}")
+
+            # Update Dataframe.
+            df = add_update_dataframe(df,pid,row_data)
+
 
         print(f"\n")
 
@@ -1378,6 +1403,7 @@ def main():
     print(f"Creating Log file: {log_file}")
     globals()['logger'] = setup_logger('logger', log_file, level=logging.DEBUG)
     logger.info(f"Begin log.")
+    logger.info(f"Running User: {username}")
 
     # Read Content Models - Proposed for later.
     # globals()['content_models'] = read_yaml_file('content_models.yml')

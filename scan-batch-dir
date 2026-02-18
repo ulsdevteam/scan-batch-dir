@@ -798,7 +798,7 @@ def process_file(df, file_path: str, level):
 
         # Set the file weight if the file_name is a digit or contains "-\d{4}"
         file_weight = ''
-        if level > 1:
+        if level >= 1:
             if file_name.isdigit():
                 file_weight = int(file_name)
             else:
@@ -813,12 +813,17 @@ def process_file(df, file_path: str, level):
 
         # Get the model from the map.
         my_model = get_model(level)
-        field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',my_model)
-        logger.info(f"File is model: {my_model}, TID: {field_model}")
+        #field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',my_model)
+        #logger.info(f"File is model: {my_model}, TID: {field_model}")
 
-        # Get the resource_type from the map
+        # Get model info from the map.
         model_info = get_model_info(my_model,models)
         resource_type = model_info.get('resource_type','None')
+        imodel = model_info.get('imodel','None')
+
+        # Get the field_model from JSONAPI
+        field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',imodel)
+        logger.info(f"File is model: {my_model}, TID: {field_model}")
 
         # Process any .tif files.
         if (file_ext.lower() == ".tif"):
@@ -843,7 +848,7 @@ def process_file(df, file_path: str, level):
                 'parent_id': parent_folder,
                 'field_weight': file_weight,
                 'field_model': field_model,
-                'model': my_model,
+                'model': imodel,
                 'field_resource_type': resource_type,
                 'level': level,
                 }
@@ -877,7 +882,7 @@ def process_file(df, file_path: str, level):
                 'parent_id': parent_folder,
                 'field_weight': file_weight,
                 'field_model': field_model,
-                'model': my_model,
+                'model': imodel,
                 'field_resource_type': resource_type,
                 'level': level,
                 }
@@ -906,7 +911,7 @@ def process_file(df, file_path: str, level):
                 'level': level,
                 'field_model': field_model,
                 'field_weight': file_weight,
-                'model': my_model,
+                'model': imodel,
                 'field_resource_type': resource_type,
                 }
 
@@ -934,9 +939,9 @@ def process_file(df, file_path: str, level):
                 'level': level,
                 'field_model': field_model,
                 'field_weight': file_weight,
-                'model': my_model,
+                'model': imodel,
                 'field_resource_type': resource_type,
-                }
+            }
 
             logger.info(f"Row Data: {row_data}")
 
@@ -977,6 +982,9 @@ def process_file(df, file_path: str, level):
             row_data = {
                 'id':   pid,
                 'file': file_path,
+                'field_weight': file_weight,
+                'field_model': field_model,
+                'model': imodel,
             }
 
             logger.info(f"Row Data: {row_data}")
@@ -1164,106 +1172,133 @@ def main():
     globals()['models'] = {
         'Compound Audio 1': {
             'model': 'Compound Object',
+            'imodel': 'Compound Object',
             'resource_type': 'Collection',
             'child': 'Audio',
         },
         'Compound Book': {
             'model': 'Compound Object',
+            'imodel': 'Compound Object',
             'resource_type': 'Collection',
             'child': 'Paged Content',
         },
         'Compound Image 1': {
             'model': 'Paged Content',
+            'imodel': 'Paged Content',
             'resource_type': 'Collection',
             'child': 'Page',
         },
         'Compound Video 1': {
             'model': 'Compound Object',
+            'imodel': 'Compound Object',
             'resource_type': 'Collection',
             'child': 'Video',
         },
         'Compound Object': {
             'model': 'Compound Object',
+            'imodel': 'Compound Object',
             'resource_type': 'Collection',
             'child': 'None',
         },
         'Collection': {
             'model': 'Collection',
+            'imodel': 'Collection',
             'resource_type': 'Collection',
             'child': 'None',
         },
         'Serial 1': {
             'model': 'Newspaper',
+            'imodel': 'Newspaper',
             'resource_type': 'Collection',
             'child': 'Issue 1',
         },
         'Serial 2': {
             'model': 'Newspaper',
+            'imodel': 'Newspaper',
             'resource_type': 'Collection',
             'child': 'Issue 2',
         },
         'Issue 1': {
-            'model': 'Publication Issue',
+            'model': 'Publication Issue 1',
+            'imodel': 'Publication Issue',
             'resource_type': 'Collection',
             'child': 'Page',
         },
         'Issue 2': {
-            'model': 'Publication Issue',
+            'model': 'Publication Issue 2',
+            'imodel': 'Publication Issue',
             'resouce_type': 'Text',
             'child': 'File',
         },
-        'Publication Issue': {
+        'Publication Issue 1': {
             'model': 'Publication Issue',
+            'imodel': 'Publication Issue',
             'resource_type': 'Collection',
             'child': 'Page',
         },
+        'Publication Issue 2': {
+            'model': 'Publication Issue',
+            'imodel': 'Publication Issue',
+            'resource_type': 'Text',
+            'child': 'PDF',
+        },
         'Book': {
             'model': 'Paged Content',
+            'imodel': 'Paged Content',
             'resource_type': 'Collection',
             'child': 'Page',
         },
         'Paged Content': {
             'model': 'Paged Content',
+            'imodel': 'Paged Content',
             'resource_type': 'Collection',
             'child': 'Page',
         },
         'Digital Document': {
             'model': 'Digital Document',
+            'imodel': 'Digital Document',
             'resource_type': 'Text',
             'child': 'None',
         },
         'Page': {
             'model': 'Page',
+            'imodel': 'Page',
             'resource_type': 'Text',
             'child': 'File',
         },
         'Image': {
             'model': 'Image',
+            'imodel': 'Image',
             'resource_type': 'Still Image',
             'child': 'File',
         },
         'Audio': {
             'model': 'Audio',
+            'imodel': 'Audio',
             'resource_type': 'Sound',
             'child': 'File',
         },
         'Video': {
             'model': 'Video',
+            'imodel': 'Video',
             'resource_type': 'Moving Image',
             'child': 'File',
         },
         'PDF': {
             'model': 'Digital Document',
+            'imodel': 'Digital Document',
             'resource_type': 'Text',
             'child': 'File',
         },
         'Binary': {
             'model': 'Binary',
+            'imodel': 'Binary',
             'resource_type': 'Unspecified',
             'child': 'File',
         },
         'File': {
             'model': 'File',
+            'imodel': 'File',
             'child': 'None',
         },
     }

@@ -1,4 +1,5 @@
-#!/usr/bin/python3
+#!/usr/bin/python3.12
+
 import yaml
 import argparse
 import os
@@ -11,9 +12,13 @@ import logging
 import openpyxl
 import csv
 import io
+import re
+import requests
 import pandas as pd
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+
+pd.set_option('future.no_silent_downcasting', True)
 
 # Setup the log file format.
 log_formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
@@ -172,7 +177,7 @@ def read_google_sheet(spreadsheet_id: str, sheet_name="Sheet1", credentials_file
 
             # Create DataFrame
             df = pd.DataFrame(padded_rows, columns=headers)
-        
+
             return df
 
     except Exception as e:
@@ -234,7 +239,7 @@ def update_dataframe(df: pd.DataFrame, match_column: str, match_value: str, upda
 
     Args:
         df (pandas.DataFrame): The DataFrame containing updated data.
-        match_column (str): 
+        match_column (str):
         match_value (str):
         update_dict (dict):
 
@@ -268,7 +273,7 @@ def update_dataframe(df: pd.DataFrame, match_column: str, match_value: str, upda
             if column in df_copy.columns:
                 df_copy.loc[mask, column] = value
             else:
-                logger.warning(f"update_dataframe: Column:{column} does not exist - unable to update with value: {value}.") 
+                logger.warning(f"update_dataframe: Column:{column} does not exist - unable to update with value: {value}.")
                 print(f"update_dataframe: Column:{column} does not exist - unable to update with value: {value}.")
 
         # Clean Dataframe of NaN values.
@@ -278,18 +283,18 @@ def update_dataframe(df: pd.DataFrame, match_column: str, match_value: str, upda
 
     except Exception as e:
         return df, False, f"update_dataframe - An error occurred: {str(e)}"
-    
+
 
 
 def add_row_to_dataframe(df, row_data, key_column):
     """
     Add a new row to a pandas DataFrame, ensuring the key column value is unique.
-    
+
     Parameters:
     df (pandas.DataFrame): The input DataFrame
     row_data (dict): Dictionary containing the new row data with column names as keys
     key_column (str): The column name to check for uniqueness
-    
+
     Returns:
     pandas.DataFrame: DataFrame with the new row appended if key is unique, original DataFrame otherwise
     """
@@ -302,26 +307,26 @@ def add_row_to_dataframe(df, row_data, key_column):
         # Check if key_column exists in DataFrame
         if key_column not in df.columns:
             raise ValueError(f"add_row_to_dataframe - Key column '{key_column}' not found in DataFrame")
-    
+
         # Check if key_column exists in row_data
         if key_column not in row_data:
             raise ValueError(f"add_row_to_dataframe - Key column '{key_column}' not found in row_data")
-    
+
         # Check if the key value already exists
         if row_data[key_column] in df[key_column].values:
             #print(f"Warning: Key value '{row_data[key_column]}' already exists in column '{key_column}'. Row not added.")
             return df, False, "add_row_to_dataframe - Row with Key column {key_column} already exists."
-    
+
         # Convert row_data to DataFrame
         new_row = pd.DataFrame([row_data])
-    
+
         # Append the new row to DataFrame
         df_ret = pd.concat([df, new_row], ignore_index=True)
 
         # Remove any NaN values.
         df = df_ret.fillna('')
 
-        return df, True, f"add_row_to_dataframe - Successfully added dataframe row" 
+        return df, True, f"add_row_to_dataframe - Successfully added dataframe row"
 
     except Exception as e:
         return df, False, f"add_row_to_dataframe - Failed to add dataframe row: {str(e)}"
@@ -355,10 +360,10 @@ def value_exists_in_column(df, column_name, value):
 def scan_directory(directory):
     """
     Recursively scan a directory and return a list of files and subdirectories.
-    
+
     Args:
         directory (str): Path to the directory to scan.
-    
+
     Returns:
         list: List of tuples containing file/subdirectory name, type, and path.
     """
@@ -381,7 +386,7 @@ def convert_tiff_to_jp2(tif_file_path, jp2_file_path):
         tif_file_path (str): A full path the TIFF file.
         jp2_file_path (str): A full path to the resulting JP2 file.
     Returns:
-        None 
+        None
     """
     args = [
         "/usr/bin/gm",
@@ -395,12 +400,12 @@ def convert_tiff_to_jp2(tif_file_path, jp2_file_path):
         "-define",
         "jp2:rate=1.0",
         "-define",
-        "jp2:lazy", 
+        "jp2:lazy",
         "-define",
         "jp2:prg=rlcp",
         "-define",
         "jp2:mode=int",
-        "-define", 
+        "-define",
         "jp2:ilyrrates='0.015625,0.01858,0.0221,0.025,0.03125,0.03716,0.04419,0.05,0.0625,0.075,0.088,0.1,0.125,0.15,0.18,0.21,0.25,0.3,0.35,0.4,0.5,0.6,0.7,0.84'",
         tif_file_path,
         jp2_file_path
@@ -411,7 +416,8 @@ def convert_tiff_to_jp2(tif_file_path, jp2_file_path):
         if (result.returncode == 0):
             logger.info(f"Successfully converted TIFF to JP2: {tif_file_path}")
     except Exception as e:
-        raise Exception(f"Failed to convert TIFF to JP2: {str(e)}")
+        logger.error(f"Failed to convert TIFF to JP2: {str(e)}")
+        #raise Exception(f"Failed to convert TIFF to JP2: {str(e)}")
 
 def is_valid_image(image_path):
     """
@@ -510,12 +516,13 @@ def parse_arguments():
     parser.add_argument('--config-file', dest="config_file", required=True, help='Path to the YAML configuration file.')
     parser.add_argument('--log-file', dest="log_file", required=True, help='Path to the log file.')
     parser.add_argument('--directory', dest="directory", required=True, help='Path to the directory to scan.')
+    parser.add_argument('--model', dest="model", required=True, help='The Islandora Model associated with the batch.')
 
     # Optional arguments
     parser.add_argument('--in-google-sheet-id', dest="in_gs_id", help='Google Sheet ID related to the directory.')
     parser.add_argument('--in-google-sheet-name', dest="in_gs_name", help='Google Sheet Tab Name.')
     parser.add_argument('--in-google-creds-file', dest="in_gs_creds", help='Google Credentials json file.')
-    
+
     # Parse Arguments
     args = parser.parse_args()
 
@@ -524,7 +531,7 @@ def parse_arguments():
 def process_tiff(file_path:str):
     """
     Processes a TIFF (.tif) file and converts it to a JP2 (.jp2) file.
-    
+
     Args:
         file_path (str) The path to incoming TIFF file.
 
@@ -543,9 +550,13 @@ def process_tiff(file_path:str):
     out_pid  = f"{parent}-{pid}"
 
     logger.info(f"Tiff: Creating JP2: {jp2_path}")
-    print(f"Tiff: Creating JP2: {jp2_path} from {file_path}")
     if not os.path.exists(jp2_path):
+        logger.info("Creating JP2: In: {file_path} Out: {jp2_path}")
+        print(f"  Creating JP2:\n    In: {file_path}\n    Out: {jp2_path}")
         convert_tiff_to_jp2(file_path, jp2_path)
+    else:
+        logger.warning("JP2 Already Exists: {jp2_path}")
+        print(f"  JP2 Already Exists: {jp2_path}")
 
     return out_pid,jp2_path
 
@@ -590,7 +601,7 @@ def process_transcript(file_path:str):
 def process_thumbnail(file_path:str):
     """
     Determine the pid and path to the thumbnail file.
-    
+
     Args:
         file_path (str) The path to the incoming thumbnail.
 
@@ -622,7 +633,7 @@ def process_unknown(file_path:str):
     pid,parent,file,dir,ext = get_file_info(file_path)
     out_pid = f"{parent}-{pid}"
     unknown_path = f"{dir}/{pid}{ext}"
-    
+
     return out_pid,unknown_path
 
 
@@ -650,7 +661,31 @@ def get_file_info(file_path: str):
     return(pid,parent,file,dir,ext)
 
 
-def add_update_dataframe(df: pd.DataFrame, pid: str, row_data, file_name: str):
+def dump_df_columns(df: pd.DataFrame, columns: list):
+    """
+    Prints a DataFrame containing only the specified columns.
+
+    Parameters:
+        df (pd.DataFrame): The original DataFrame.
+        columns (list): List of column names to include.
+
+    Raises:
+        ValueError: If any requested column does not exist in the DataFrame.
+    """
+    # Validate columns
+    missing_cols = [col for col in columns if col not in df.columns]
+    if missing_cols:
+        logger.error(f"The following columns do not exist in the DataFrame: {missing_cols}")
+        #raise ValueError(f"The following columns do not exist in the DataFrame: {missing_cols}")
+
+    # Prints the DataFrame with selected columns
+    with pd.option_context(
+        'display.max_rows', None,
+    ):
+        print(f"Dataframe:\n{df[columns]}")
+
+
+def add_update_dataframe(df: pd.DataFrame, pid: str, row_data):
     """
     Depending upon if the pid exists in the 'id' column of the dataframe
     either add or update the row to the dataframe.
@@ -659,13 +694,12 @@ def add_update_dataframe(df: pd.DataFrame, pid: str, row_data, file_name: str):
         df (DataFrame)  The Pandas Dataframe to work with.
         pid (str)       The PID to find in the DataFrame 'id' column.
         row_data (dict) The row data to add/update the row with.
-        file_name (str) The file_name of the file we are working with.
 
     Returns:
         df (DataFrame)  The updated DataFrame.
     """
     if (value_exists_in_column(df,'id',pid)):
-        logger.info(f"Updating Dataframe: {pid},{file_name}")
+        logger.info(f"Updating Dataframe: {pid}")
         updated_df,success,msg = update_dataframe(df, 'id', pid, row_data)
         if not (success):
             logger.warning(f"Update DataFrame: Failed for PID: {pid} - {msg}")
@@ -675,7 +709,7 @@ def add_update_dataframe(df: pd.DataFrame, pid: str, row_data, file_name: str):
             logger.info(f"Updating DataFrame: Success for PID: {pid}")
             return updated_df
     else:
-        logger.info(f"Adding to Dataframe: {pid},{file_name}")
+        logger.info(f"Adding to Dataframe: {pid}")
         updated_df,success,msg = add_row_to_dataframe(df,row_data,key_column='id')
         if not (success):
             logger.warning(f"Adding to DataFrame: Failed for PID: {pid} - {msg}")
@@ -686,244 +720,634 @@ def add_update_dataframe(df: pd.DataFrame, pid: str, row_data, file_name: str):
             return updated_df
 
 
-def process_object(file_type: str, file_path: str, parent: str, df: pd.DataFrame):
-    """
-    Process the incoming file object.
+#def process_object(file_type: str, file_path: str, parent: str, df: pd.DataFrame):
+#    """
+#    Process the incoming file object.
+#
+#    Args:
+#        file_type (str) The type of object ('File','Directory')
+#        file_path (str) The file_path to the object.
+#        parent    (str) The parent directory of the object.
+#        df (pd.DataFrame)  The Pandas DataFrame we will be updating.
+#
+#    Returns:
+#        df (pd.DataFrame)  The Updated Pandas DataFrame.
+#    """
+#    #logger.info(f"Processing an object.")
+#    # object files are kept within a folder of the top level folder.
+#    # files are .tif files which need to be converted.
+#
+#    if not (is_valid_dataframe(df)):
+#        logger.warning("process_object: Incoming dataframe is invalid.")
+#        print(f"process_object: Incoming dataframe is invalid.")
+#        print(f"Invalid DataFrame: {df}")
+#
+#    # Process File...
+#    if (file_type == "File" ) and ( parent != "" ):
+#        #print(f"Processing File")
+#        ignore_file_list = ["target.tif","manifest.csv","manifest.xlsx","manifest.xls"]
+#
+#        dir,ext = os.path.splitext(file_path)
+#        file_name = os.path.basename(dir)
+#        pid = file_name
+#
+#        if ( ext == ".tif" ):
+#            logger.info(f"Processing TIFF: {file_path}")
+#            print(f"Processing TIFF: {file_path}")
+#            outpid,outfile = process_tiff(file_path)
+#            if (is_valid_image(file_path) and is_valid_filesize(134,file_path) and is_valid_image(outfile) and is_valid_filesize(134,outfile)):
+#                row_data = {'id': outpid, 'file': outfile}
+#                updated_df = add_update_dataframe(df,outpid,row_data)
+#                return updated_df
+#
+#        elif ( ext == ".mp3" ):
+#            logger.info(f"Processing MP3: {file_path}")
+#            print(f"Procesing MP3: {file_path}")
+#            outpid,outfile = process_mp3(file_path)
+#            row_data = {'id': outpid, 'file': outfile}
+#            updated_df = add_update_dataframe(df,outpid,row_data)
+#            return updated_df
+#
+#        elif (( ext == ".vtt" ) or ( ext == ".srt" )):
+#            logger.info(f"Processing WebVTT/SRT: {file_path}")
+#            print(f"Processing WebVTT/SRT: {file_path}")
+#            outpid,outfile = process_transcript(file_path)
+#            row_data = {'id': outpid, 'transcript': outfile}
+#            updated_df = add_update_dataframe(df,outpid,row_data)
+#            return updated_df
+#
+#        elif (( ext == ".jpg" ) or ( ext == ".png" )):
+#            logger.info(f"Processing Thumbnail: {file_path}")
+#            print(f"Processing Thumbnail: {file_path}")
+#            outpid,outfile = process_thumbnail(file_path)
+#            row_data = {'id': outpid, 'thumbnail': outfile}
+#            updated_df = add_update_dataframe(df,outpid,row_data)
+#            return updated_df
+#
+#        else:
+#            logger.info(f"Processing Unknown: {file_path}")
+#            print(f"Unknown File extension: {ext} - Skipping.")
+#            outpid,outfile = process_unknown(file_path)
+#            row_data = {'id': outpid, 'file': outfile}
+#            updated_df = add_update_dataframe(df,outpid,row_data)
+#            return updated_df
+#
+#
+#    # Process Top Level file...
+#    elif (file_type == "File") and (parent == ""):
+#        # Top Level file.
+#        #print(f"Processing Top-Level File")
+#        ignore_file_list = ["ignore"]
+#        if file_path.casefold() in ignore_file_list:
+#            logger.info(f"Ingoring: {file_path}")
+#        else:
+#            logger.info(f"Processing Top Level file: {file_path}")
+#            dir,ext = os.path.splitext(file_path)
+#            pid = os.path.basename(dir)
+#
+#            if ( ext == ".tif" ):
+#                # Top Level file is a .tif file.
+#                logger.info(f"Processing Top Level TIFF: {file_path}")
+#                print(f"Processing Top Level TIFF: {file_path}")
+#                outpid,outfile = process_tiff(file_path)
+#                row_data = {'id': pid, 'file': outfile}
+#                updated_df = add_update_dataframe(df,pid,row_data)
+#                return updated_df
+#
+#            elif ( ext == ".mp3" ):
+#                logger.info(f"Processing MP3: {file_path}")
+#                print(f"Procesing MP3: {file_path}")
+#                outpid,outfile = process_mp3(file_path)
+#                row_data = {'id': pid, 'file': outfile}
+#                updated_df = add_update_dataframe(df,pid,row_data)
+#                return updated_df
+#
+#            elif (( ext == ".vtt" ) or ( ext == ".srt" )):
+#                logger.info(f"Processing WebVTT/SRT: {file_path}")
+#                print(f"Processing WebVTT/SRT: {file_path}")
+#                outpid,outfile = process_transcript(file_path)
+#                row_data = {'id': pid, 'transcript': outfile}
+#                updated_df = add_update_dataframe(df,pid,row_data)
+#                return updated_df
+#
+#            elif (( ext == ".jpg" ) or ( ext == ".png" )):
+#                logger.info(f"Processing Thumbnail: {file_path}")
+#                print(f"Processing Thumbnail: {file_path}")
+#                outpid,outfile = process_thumbnail(file_path)
+#                row_data = {'id': pid, 'thumbnail': outfile}
+#                updated_df = add_update_dataframe(df,pid,row_data)
+#                return updated_df
+#
+#            else:
+#                logger.info(f"Processing Unknown: {file_path}")
+#                print(f"Unknown File extension: {ext} - Skipping.")
+#                outpid,outfile = process_unknown(file_path)
+#                row_data = {'id': pid, 'file': outfile}
+#                updated_df = add_update_dataframe(df,pid,row_data)
+#                return updated_df
+#
+#    # Process Directory...
+#    elif (file_type == "Directory"):
+#        #print(f"Processing Directory")
+#        ignore_dir_list = ["ignore"]
+#        if file_path.casefold() in ignore_dir_list:
+#            logger.info(f"Ignoreing: {file_path}")
+#        else:
+#            # Continue
+#            logger.info(f"Processing Directory: {file_path}")
+#            dir,ext = os.path.splitext(file_path)
+#            pid = os.path.basename(dir)
+#
+#            # Check if pid in Google Sheet.
+#            if (value_exists_in_column(df,'id',pid)):
+#                # Update Existing info.
+#                print(f"Found: {pid} in Google Sheet")
+#                logger.info(f"Found: {pid} in Google Sheet")
+#
+#                # Set Row Data
+#                row_data = {'id': pid}
+#
+#                # Update the dataframe.
+#                logger.info(f"Updating DataFrame: {pid}")
+#                #updated_df,success,msg = update_dataframe(df, 'id', pid, row_data)
+#                df,success,msg = update_dataframe(df, 'id', pid, row_data)
+#
+#                if not (success):
+#                    logger.warning(f"Update DataFrame: Failed for PID: {pid} - {msg}")
+#                    print(f"Update DataFrame: Failed for PID: {pid} - {msg}")
+#                else:
+#                    #return updated_df
+#                    return df
+#
+#            else:
+#                # Add new info.
+#                print(f"Not Found: Adding {pid} to DataFrame")
+#                logger.info(f"Not Found: Adding {pid} to DataFrame")
+#
+#                # Set Row Data.
+#                row_data = {'id': pid}
+#
+#                # Update the dataframe.
+#                logger.info(f"Updating DataFrame: {pid}")
+#                print(f"Adding: {row_data}")
+#                #updated_df,success,msg = add_row_to_dataframe(df,row_data,key_column='id')
+#                df,success,msg = add_row_to_dataframe(df,row_data,'id')
+#
+#                if not (success):
+#                    logger.warning(f"Add to DataFrame: failed for PID: {pid} - {msg}")
+#                    print(f"Add to DataFrame: Failed for PID: {pid} - {msg}")
+#                else:
+#                    return df
+#
+#    else:
+#        print(f"Unknown object.")
+#        exit()
 
-    Args:
-        file_type (str) The type of object ('File','Directory')
-        file_path (str) The file_path to the object.
-        parent    (str) The parent directory of the object.
-        df (pd.DataFrame)  The Pandas DataFrame we will be updating.
+
+def get_value_from_df(df: pd.DataFrame,match_column: str,match_value,return_column:str):
+    """
+    Given a pandas DataFrame, find the row where match_column == match_value
+    and return the value from return_column.
+
+    Parameters:
+        df (pd.DataFrame): The DataFrame to search.
+        match_column (str): Column name to match on.
+        match_value: Value to look for in match_column.
+        return_column (str): Column name whose value should be returned.
 
     Returns:
-        df (pd.DataFrame)  The Updated Pandas DataFrame.
+       The value from return_column if found, else None.
     """
-    #logger.info(f"Processing an object.")
-    # object files are kept within a folder of the top level folder.
-    # files are .tif files which need to be converted.
 
-    if not (is_valid_dataframe(df)):
-        logger.warning("process_object: Incoming dataframe is invalid.")
-        print(f"process_object: Incoming dataframe is invalid.")
-        print(f"Invalid DataFrame: {df}")
+    # Validate columns
+    if match_column not in df.columns:
+        #raise ValueError(f"Column '{match_column}' does not exist in the DataFrame.")
+        logger.warning(f"Column '{match_column}' does not exist in the DataFrame.")
+        return None
+    if return_column not in df.columns:
+        #raise ValueError(f"Column '{return_column}' does not exist in the DataFrame.")
+        logger.warning(f"Column '{return_column}' does not exist in the DataFrame.")
+        return None
 
-    # Process File...
-    if (file_type == "File" ) and ( parent != "" ):
-        #print(f"Processing File")
-        ignore_file_list = ["target.tif","manifest.csv","manifest.xlsx","manifest.xls"]
+    # Filter the DataFrame
+    filtered = df[df[match_column] == match_value]
 
-        dir,ext = os.path.splitext(file_path)
-        file_name = os.path.basename(dir)
-        pid = file_name
-
-        if ( ext == ".tif" ):
-            logger.info(f"Processing TIFF: {file_path}")
-            print(f"Processing TIFF: {file_path}")
-            outpid,outfile = process_tiff(file_path)
-            if (is_valid_image(file_path) and is_valid_filesize(134,file_path) and is_valid_image(outfile) and is_valid_filesize(134,outfile)):
-                row_data = {'id': outpid, 'file': outfile}
-                updated_df = add_update_dataframe(df,outpid,row_data,outfile)
-                return updated_df
-
-        elif ( ext == ".mp3" ):
-            logger.info(f"Processing MP3: {file_path}")
-            print(f"Procesing MP3: {file_path}")
-            outpid,outfile = process_mp3(file_path)
-            row_data = {'id': outpid, 'file': outfile}
-            updated_df = add_update_dataframe(df,outpid,row_data,outfile)
-            return updated_df
-
-        elif (( ext == ".vtt" ) or ( ext == ".srt" )):
-            logger.info(f"Processing WebVTT/SRT: {file_path}")
-            print(f"Processing WebVTT/SRT: {file_path}")
-            outpid,outfile = process_transcript(file_path)
-            row_data = {'id': outpid, 'transcript': outfile}
-            updated_df = add_update_dataframe(df,outpid,row_data,outfile) 
-            return updated_df
-
-        elif (( ext == ".jpg" ) or ( ext == ".png" )):
-            logger.info(f"Processing Thumbnail: {file_path}")
-            print(f"Processing Thumbnail: {file_path}")
-            outpid,outfile = process_thumbnail(file_path)
-            row_data = {'id': outpid, 'thumbnail': outfile}
-            updated_df = add_update_dataframe(df,outpid,row_data,outfile)
-            return updated_df
-
-        else:
-            logger.info(f"Processing Unknown: {file_path}")
-            print(f"Unknown File extension: {ext} - Skipping.")
-            outpid,outfile = process_unknown(file_path)
-            row_data = {'id': outpid, 'file': outfile}
-            updated_df = add_update_dataframe(df,outpid,row_data,outfile)
-            return updated_df
-
-
-    # Process Top Level file...
-    elif (file_type == "File") and (parent == ""):
-        # Top Level file.
-        #print(f"Processing Top-Level File")
-        ignore_file_list = ["ignore"]
-        if file_path.casefold() in ignore_file_list:
-            logger.info(f"Ingoring: {file_path}")
-        else:
-            logger.info(f"Processing Top Level file: {file_path}")
-            dir,ext = os.path.splitext(file_path)
-            pid = os.path.basename(dir)
-
-            if ( ext == ".tif" ):
-                # Top Level file is a .tif file.
-                logger.info(f"Processing Top Level TIFF: {file_path}")
-                print(f"Processing Top Level TIFF: {file_path}")
-                outpid,outfile = process_tiff(file_path)
-                row_data = {'id': pid, 'file': outfile}
-                updated_df = add_update_dataframe(df,pid,row_data,outfile)
-                return updated_df
-
-            elif ( ext == ".mp3" ):
-                logger.info(f"Processing MP3: {file_path}")
-                print(f"Procesing MP3: {file_path}")
-                outpid,outfile = process_mp3(file_path)
-                row_data = {'id': pid, 'file': outfile}
-                updated_df = add_update_dataframe(df,pid,row_data,outfile)
-                return updated_df
-
-            elif (( ext == ".vtt" ) or ( ext == ".srt" )):
-                logger.info(f"Processing WebVTT/SRT: {file_path}")
-                print(f"Processing WebVTT/SRT: {file_path}")
-                outpid,outfile = process_transcript(file_path)
-                row_data = {'id': pid, 'transcript': outfile}
-                updated_df = add_update_dataframe(df,pid,row_data,outfile)
-                return updated_df
-
-            elif (( ext == ".jpg" ) or ( ext == ".png" )):
-                logger.info(f"Processing Thumbnail: {file_path}")
-                print(f"Processing Thumbnail: {file_path}")
-                outpid,outfile = process_thumbnail(file_path)
-                row_data = {'id': pid, 'thumbnail': outfile}
-                updated_df = add_update_dataframe(df,pid,row_data,outfile)
-                return updated_df
-
-            else:
-                logger.info(f"Processing Unknown: {file_path}")
-                print(f"Unknown File extension: {ext} - Skipping.")
-                outpid,outfile = process_unknown(file_path)
-                row_data = {'id': pid, 'file': outfile}
-                updated_df = add_update_dataframe(df,pid,row_data,outfile)
-                return updated_df
-
-    # Process Directory... 
-    elif (file_type == "Directory"):
-        #print(f"Processing Directory")
-        ignore_dir_list = ["ignore"]
-        if file_path.casefold() in ignore_dir_list:
-            logger.info(f"Ignoreing: {file_path}")
-        else:
-            # Continue
-            logger.info(f"Processing Directory: {file_path}")
-            dir,ext = os.path.splitext(file_path)
-            pid = os.path.basename(dir)
-            
-            # Check if pid in Google Sheet.
-            if (value_exists_in_column(df,'id',pid)):
-                # Update Existing info.
-                print(f"Found: {pid} in Google Sheet")
-                logger.info(f"Found: {pid} in Google Sheet")
-
-                # Set Row Data
-                row_data = {'id': pid}
-
-                # Update the dataframe.
-                logger.info(f"Updating DataFrame: {pid}")
-                #updated_df,success,msg = update_dataframe(df, 'id', pid, row_data)
-                df,success,msg = update_dataframe(df, 'id', pid, row_data)
-
-                if not (success):
-                    logger.warning(f"Update DataFrame: Failed for PID: {pid} - {msg}")
-                    print(f"Update DataFrame: Failed for PID: {pid} - {msg}")
-                else:
-                    #return updated_df
-                    return df
-
-            else:
-                # Add new info.
-                print(f"Not Found: Adding {pid} to DataFrame")
-                logger.info(f"Not Found: Adding {pid} to DataFrame")
-
-                # Set Row Data.
-                row_data = {'id': pid}
-
-                # Update the dataframe.
-                logger.info(f"Updating DataFrame: {pid}")
-                print(f"Adding: {row_data}")
-                #updated_df,success,msg = add_row_to_dataframe(df,row_data,key_column='id')
-                df,success,msg = add_row_to_dataframe(df,row_data,'id')
-
-                if not (success):
-                    logger.warning(f"Add to DataFrame: failed for PID: {pid} - {msg}")
-                    print(f"Add to DataFrame: Failed for PID: {pid} - {msg}")
-                else:
-                    return df
-    
+    if not filtered.empty:
+        return filtered.iloc[0][return_column]  # Return first match
     else:
-        print(f"Unknown object.")
-        exit()
+        return None
 
 
-def process_objects(data, directory: str, df: pd.DataFrame):
+def get_taxonomy_tid(base_url, vocabulary, term_name, auth_token=None):
     """
-    Process a list of objects
+    Fetch taxonomy term ID (tid) from Drupal JSON:API given term name.
 
-    Args:
-        data (list of tupples) The result of scan_directory.
-        directory (str) The full directory path that we will be working with.
-        df (DataFrame)  The Pandas DataFrame that we will be working with.
+    Parameters:
+        base_url (str): Base URL of the Drupal site (e.g., 'https://example.com').
+        vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
+        term_name (str): Name of the taxonomy term to search.
+        auth_token (str): Optional Bearer token for authentication.
 
     Returns:
-        N/a.
+        str or None: The taxonomy term ID if found, else None.
     """
-    #print(f"process_objects: Input DataFrame:")
-    #print(df)
+    # JSON:API endpoint for taxonomy terms
+    url = f"{base_url}/jsonapi/taxonomy_term/{vocabulary}"
 
-    # Begin Processing the listing of the directory.
-    logger.info(f"Processing file data.")
-    print(f"Processing the directory: {directory}")
+    # Filter by term name
+    params = {
+        "filter[name]": term_name
+    }
 
-    # Loop through the file listing.
-    for row, (file_name, file_type, file_path) in enumerate(data, start=2):
-        # Skip things we don't want to include.
-        if (( file_name == "target.tif" ) or ( file_name == "manifest.csv" ) or ( file_name == "manifest.xlsx" )):
-            next
+    headers = {
+        "Accept": "application/vnd.api+json"
+    }
+
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
+
+    try:
+        response = requests.get(url, headers=headers, params=params)
+
+    except Exception as e:
+        logger.error(f"get_taxonomy_tid - Unexpected error: {e}")
+        print(f"Unexpected error: {e}")
+
+    if response.status_code == 200:
+        data = response.json()
+        if data.get("data"):
+            return data["data"][0]["attributes"]["drupal_internal__tid"]
         else:
-            print(f"Inspecting: {file_path}")
-            # Define the parent
-            parent = file_path.replace(directory, "")
-            parent = parent.replace("/"+file_name, "")
-            parent = parent.replace("/","")
+            return None
+    else:
+        logger.error(f"get_taxonomy_tid - Error {response.status_code}: {response.text}")
 
-            #print(f"File_type: {file_type}")
-            #print(f"File_Path: {file_path}")
-            #print(f"Parent:    {parent}")
 
-            df = process_object(file_type,file_path,parent,df)
+def process_file(df, file_path: str, level):
+    logger.info(f"Function: process_file")
+    logger.info(f"Processing File: {file_path}")
+    print(f"Processing File: {file_path}")
+
+    # Skip objects that we don't want to process.
+    if not any(sub in file_path for sub in skip):
+
+        file_folder = os.path.dirname(file_path)        # The Full Path including Directory containing the file.
+        base_name = os.path.basename(file_path)         # The Base filename with extension of the file give the file_path.
+        file_name,file_ext = os.path.splitext(base_name)# The Separated Filename and Extension of the Base filename.
+
+        # Set the file weight if the file_name is a digit or contains "-\d{4}"
+        file_weight = ''
+        if level > 1:
+            if file_name.isdigit():
+                file_weight = int(file_name)
+            else:
+                pattern = r'.*-(\d{4})'
+                match = re.search(pattern,file_name)
+                if match:
+                    file_weight = int(match.group(1))
+
+        # Set parent information.
+        parent_path   = os.path.dirname(file_path)
+        parent_folder = os.path.basename(parent_path)
+
+        # Get the model from the map.
+        my_model = get_model(level)
+        field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',my_model)
+        logger.info(f"File is model: {my_model}, TID: {field_model}")
+
+        # Get the resource_type from the map
+        model_info = get_model_info(my_model,models)
+        resource_type = model_info.get('resource_type','None')
+
+        # Process any .tif files.
+        if (file_ext.lower() == ".tif"):
+            logger.info("File is type: TIFF")
+            print(f"  Type: TIFF")
+
+            # Create .jp2 file.
+            pid,outfile = process_tiff(file_path)
+
+            # Handle top level files.
+            if not level == 1:
+                # Not in top level folder.
+                pid = f"{parent_folder}-{file_name}"
+            else:
+                pid = f"{file_name}"
+                parent_folder = ''
+
+            # Build Row Data.
+            row_data = {
+                'id': pid,
+                'file': outfile,
+                'parent_id': parent_folder,
+                'field_weight': file_weight,
+                'field_model': field_model,
+                'model': my_model,
+                'field_resource_type': resource_type,
+                'level': level,
+                }
+
+            # Add a page title if it is a model of 'Page'.
+            # if my_model == 'Page':
+            # row_data.update({
+            #   'title': f"{pid}-{file_name}",
+            # })
+
+            logger.info(f"Row Data: {row_data}")
+
+            # Update Dataframe.
+            df = add_update_dataframe(df,pid,row_data)
+
+        # Process any .jp2 files.
+        if (file_ext.lower() == ".jp2"):
+            print(f"  Type: JP2")
+
+            # Handle Top Level files.
+            if not level == 1:
+                pid = f"{parent_folder}-{file_name}"
+            else:
+                pid = f"{file_name}"
+                parent_folder = ''
+
+            # Build Row Data.
+            row_data = {
+                'id': pid,
+                'file': outfile,
+                'parent_id': parent_folder,
+                'field_weight': file_weight,
+                'field_model': field_model,
+                'model': my_model,
+                'field_resource_type': resource_type,
+                'level': level,
+                }
+
+            logger.info(f"Row Data: {row_data}")
+
+            # Update Dataframe.
+            df = add_update_dataframe(df,pid,row_data)
+
+        # Process any audio files.
+        if (file_ext.lower() == ".mp3"):
+            print(f"  Type: Audio")
+
+            # Handle Top Level files.
+            if not level == 1:
+                pid = f"{parent_folder}-{file_name}"
+            else:
+                pid = f"{file_name}"
+                parent_folder = ''
+
+            # Build Row Data.
+            row_data = {
+                'id': pid,
+                'file': file_path,
+                'parent_id': parent_folder,
+                'level': level,
+                'field_model': field_model,
+                'field_weight': file_weight,
+                'model': my_model,
+                'field_resource_type': resource_type,
+                }
+
+            logger.info(f"Row Data: {row_data}")
+
+            # Update Dataframe.
+            df = add_update_dataframe(df,pid,row_data)
+
+        # Process any video files.
+        if (file_ext.lower() == ".mkv" or file_ext.lower() == ".mp4"):
+            print(f"  Type: Video")
+
+            # Handle Top Level files.
+            if not level == 1:
+                pid = f"{parent_folder}-{file_name}"
+            else:
+                pid = f"{file_name}"
+                parent_folder = ''
+
+            # Build Row Data.
+            row_data = {
+                'id': pid,
+                'file': file_path,
+                'parent_id': parent_folder,
+                'level': level,
+                'field_model': field_model,
+                'field_weight': file_weight,
+                'model': my_model,
+                'field_resource_type': resource_type,
+                }
+
+            logger.info(f"Row Data: {row_data}")
+
+            # Update Dataframe.
+            df = add_update_dataframe(df,pid,row_data)
+
+        # Process any transcription files.
+        if (file_ext.lower() == ".srt" or file_ext.lower() == ".vtt"):
+            print(f"  Type: Transcript")
+
+            # Handle Top Level files.
+            if not level == 1:
+                pid = f"{parent_folder}-{file_name}"
+            else:
+                pid = f"{file_name}"
+
+            # Build Row Data.
+            row_data = {
+                'transcript': file_path,
+            }
+
+            logger.info(f"Row Data: {row_data}")
+
+            # Update Dataframe.
+            df = add_update_dataframe(df,pid,row_data)
+
+        # Process any PDF files.
+        if (file_ext.lower() == ".pdf"):
+            print(f"  Type: PDF")
+
+            # Handle Top Level files.
+            if not level == 1:
+                pid = f"{parent_folder}-{file_name}"
+            else:
+                pid = f"{file_name}"
+
+
+            # Build Row Data.
+            row_data = {
+                'id':   pid,
+                'file': file_path,
+            }
+
+            logger.info(f"Row Data: {row_data}")
+
+            # Update Dataframe.
+            df = add_update_dataframe(df,pid,row_data)
+
+        # Process any simple image files.
+        if (file_ext.lower() == ".png" or file_ext.lower() == ".jpg"):
+            print(f"  Type: Simple Image")
 
         print(f"\n")
 
-    # Display the DataFrame before sending it to Google Sheets.
-    #print(f"Result Dataframe:")
-    #print(df)
+    return(df)
 
-    # Save the DataFrame to Google Sheets.
-    logger.info(f"Updating Google Sheet with DataFrame.")
-    print(f"Updating Google Sheet with DataFrame.")
-    success,msg = update_google_sheet(df, google_sheet_id, google_sheet_name, google_credentials)
-    if (success):
-        logger.info(f"Successfully Updated Google Sheet.")
-        print(f"Successfully Updated Google Sheet.")
+
+def get_directory(directory):
+    """
+    Scan a directory and return a list of files and subdirectories.
+
+    Args:
+        directory (str): Path to the directory to scan.
+
+    Returns:
+        list: List of tuples containing file/subdirectory name, type, and path.
+    """
+    print(f"Processing directory: {directory}")
+    result = []
+    for item in os.listdir(directory):
+        item_path = os.path.join(directory, item)
+        if os.path.isfile(item_path):
+            result.append((item, "File", item_path))
+        elif os.path.isdir(item_path):
+            result.append((item, "Directory", item_path))
+    result.sort(key=lambda x: (x[1] != "Directory", x[0].lower()))
+    return result
+
+def process_objects(df, directory: str, level):
+    """
+    Process the objects of the directory.
+
+    Args:
+      df: Pandas Dataframe
+      directory: Directory we are working with.
+      level: What level are we at directory wise.
+    """
+    #print(f"Level: {level}, {directory}")
+    # Get the objects in the directory.
+    data = get_directory(directory)
+
+    # Get the PID of the current directory.
+    pid = os.path.basename(directory)
+
+    # Set parent information.
+    parent_path   = os.path.dirname(directory)
+    parent_folder = os.path.basename(parent_path)
+
+    # Set model.
+    my_model = get_model(level)
+
+    # Get the resource_type from the map
+    model_info = get_model_info(my_model,models)
+    resource_type = model_info.get('resource_type','None')
+
+    # if level > 1
+    if level > 1:
+        # For this directory.
+        row_data = {
+            'id': pid,
+            'level': level,
+            'parent_id': parent_folder,
+            'model': my_model,
+            'field_resource_type': resource_type,
+        }
+        df = add_update_dataframe(df,pid,row_data)
+
+    if level == 1:
+        row_data = {
+            'id': pid,
+            'level': level,
+            'model': my_model,
+            'field_resource_type': resource_type,
+        }
+        df = add_update_dataframe(df,pid,row_data)
+
+    # For each object in the directory do.
+    for row, (file_name, file_type, file_path) in enumerate(data, start=2):
+
+        # Skip objects that we don't want to process.
+        if not any(sub in file_path for sub in skip):
+
+            # If the object is a directory.
+            if file_type == "Directory":
+                # process the directory.
+                df = process_objects(df, file_path, level + 1)
+
+            # If the object is a file.
+            if file_type == "File":
+                # process the file.
+                df = process_file(df, file_path, level + 1)
+        #else:
+        #    print(f"Skip: {file_path}")
+
+        # End if-else
+    # End For
+
+    return df
+
+def get_model_paths(start_model, models_dict):
+    """
+    Recursively map paths from a starting model to all leaf models.
+
+    Args:
+        start_model: The key of the starting model in the models dictionary
+        models_dict: The dictionary containing all model definitions
+
+    Returns:
+        A list of paths, where each path is a list of model keys from start to leaf
+    """
+    # Check if the starting model exists
+    if start_model not in models_dict:
+        return []
+
+    model_info = models_dict[start_model]
+    child = model_info.get('child', 'None')
+    model = model_info.get('model', 'None')
+
+    # Base case: if there's no child or child is 'None', return path with just this model
+    if child == 'None' or child not in models_dict:
+        #return [[start_model]]
+        return [[model]]
+
+    # Recursive case: get all paths from child and prepend current model
+    child_paths = get_model_paths(child, models_dict)
+    #return [[start_model] + path for path in child_paths]
+    return [[model] + path for path in child_paths]
+
+def get_model_info(model,models_dict):
+    # Check if the starting model exists
+    if model not in models_dict:
+        return []
+
+    model_info = models_dict[model]
+    return model_info
+
+def get_model(level):
+    #if model_paths[0][level-1] == "File":
+        # Return parent model
+    #    return model_paths[0][level-2]
+    #else:
+        # Return model
+    model_length = len(model_paths[0])
+    if model_length <= 2:
+        return model_paths[0][0]
     else:
-        logger.warning(f"Failed to update Google Sheet: {msg}")
-        print(f"Failed to update Google Sheet: {msg}")
+        return model_paths[0][level-1]
 
+def get_resource_type(level):
+    return 0
+
+
+def is_target_in_list(target,list):
+    return target in list
+
+def get_value(map, key, default=None):
+    return map.get(key, default)
+
+def add_column(df: pd.DataFrame, column_name: str, default=None):
+    if column_name not in df.columns:
+        df[column_name] = default
+    return df
 
 def main():
     """
@@ -936,6 +1360,174 @@ def main():
     Returns:
         N/a
     """
+
+    # Build models list which produces a map based upon the model.
+    # Model should eventually arive at a "File" model.
+    # The 'model' is obtained from the list of models in Islandora 2.
+    # All 'model' should be referenced below as a possible type.
+    # The 'resource_type'...
+    # The 'child' points to another model with "File" model being the end.
+    globals()['models'] = {
+        'Compound Audio 1': {
+            'model': 'Compound Object',
+            'resource_type': 'Collection',
+            'child': 'Audio',
+        },
+        'Compound Audio 2': {
+            'model': 'Compound Object',
+            'resource_type': 'Collection',
+            'child': 'COA',
+        },
+        'COA': {
+            'model': 'Compound Object',
+            'resource_type': 'Collection',
+            'child': 'Audio',
+        },
+        'Compound Book': {
+            'model': 'Compound Object',
+            'resource_type': 'Collection',
+            'child': 'Paged Content',
+        },
+        'Compound Image 1': {
+            'model': 'Paged Content',
+            'resource_type': 'Collection',
+            'child': 'Page',
+        },
+        'Compound Image 2': {
+            'model': 'Compound Object',
+            'resource_type': 'Collection',
+            'child': 'Image',
+        },
+        'Compound Video 1': {
+            'model': 'Compound Object',
+            'resource_type': 'Collection',
+            'child': 'Video',
+        },
+        'Compound Video 2': {
+            'model': 'Compound Object',
+            'resource_type': 'Collection',
+            'child': 'COV',
+        },
+        'COV': {
+            'model': 'Compound Object',
+            'resource_type': 'Collection',
+            'child': 'Video',
+        },
+        'Compound Object': {
+            'model': 'Compound Object',
+            'resource_type': 'Collection',
+            'child': 'None',
+        },
+        'Collection': {
+            'model': 'Collection',
+            'resource_type': 'Collection',
+            'child': 'None',
+        },
+        'Serial': {
+            'model': 'Newspaper',
+            'resource_type': 'Collection',
+            'child': 'Issue',
+        },
+        'Newspaper': {
+            'model': 'Newspaper',
+            'resource_type': 'Collection',
+            'child': 'Publication Issue',
+        },
+        'Issue': {
+            'model': 'Publication Issue',
+            'resource_type': 'Collection',
+            'child': 'Page',
+        },
+        'Publication Issue': {
+            'model': 'Publication Issue',
+            'resource_type': 'Collection',
+            'child': 'Page',
+        },
+        'Book': {
+            'model': 'Paged Content',
+            'resource_type': 'Collection',
+            'child': 'Page',
+        },
+        'Paged Content': {
+            'model': 'Paged Content',
+            'resource_type': 'Collection',
+            'child': 'Page',
+        },
+        'Digital Document': {
+            'model': 'Digital Document',
+            'resource_type': 'Text',
+            'child': 'None',
+        },
+        'Page': {
+            'model': 'Page',
+            'resource_type': 'Text',
+            'child': 'File',
+        },
+        'Image': {
+            'model': 'Image',
+            'resource_type': 'Still Image',
+            'child': 'File',
+        },
+        'Audio': {
+            'model': 'Audio',
+            'resource_type': 'Sound',
+            'child': 'File',
+        },
+        'Video': {
+            'model': 'Video',
+            'resource_type': 'Moving Image',
+            'child': 'File',
+        },
+        'PDF': {
+            'model': 'Digital Document',
+            'resource_type': 'Text',
+            'child': 'File',
+        },
+        'Binary': {
+            'model': 'Binary',
+            'resource_type': 'Unspecified',
+            'child': 'File',
+        },
+        'File': {
+            'model': 'File',
+            'child': 'None',
+        },
+    }
+
+
+    # Valid models.
+    # This is the list of valid models that we will work with.
+    #
+    globals()['allowed_models'] = [
+        "compound audio",
+        "compound video",
+        "compound image",
+        "compound book",
+        "compound object",
+        "collection",
+        "serial",
+        "newspaper",
+        "publication issue",
+        "issue",
+        "book",
+        "digital document",
+        "page",
+        "image",
+        "audio",
+        "video",
+        "pdf",
+        "binary"
+    ]
+
+    ### Other models:
+    #    "collection": "Collection",
+    #    "digital document": "Digital Document",
+    #    "paged content": "Paged Content",
+    #    "publication issue": "Publication Issue",
+    #    "compound object": "Compound Object",
+    #    "newspaper": "Newspaper",
+
+
     # Setup the log file format.
     globals()['log_formatter'] = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
 
@@ -959,16 +1551,40 @@ def main():
         globals()['google_credentials'] = args.in_gs_creds
     if args.in_gs_id is not None:
         globals()['google_sheet_id'] = args.in_gs_id
-    if args.in_gs_name is not None: 
+    if args.in_gs_name is not None:
         globals()['google_sheet_name'] = args.in_gs_name
     if args.log_file is not None:
         globals()['log_file'] = args.log_file
 
+    # Required Sheet Columns:
+    globals()['required_columns'] = ["id","file","level","parent_id",
+        "field_weight","field_model","model","field_resource_type","transcript"]
+
+    # Global file patterns to skip over.
+    globals()['skip'] = ["ignore",".jp2",".metadata","meta",".opex",".fits",
+        "target.tif","metadata.csv","metadata.xlsx","manifest.xlsx","manifest.csv"]
+
     # Create the Log file.
-    #print(f"Creating log file: {args.log_file}")
-    #globals()['logger'] = setup_logger('logger', args.log_file, level=logging.DEBUG)
+    print(f"Creating Log file: {log_file}")
     globals()['logger'] = setup_logger('logger', log_file, level=logging.DEBUG)
     logger.info(f"Begin log.")
+
+    # Read Content Models
+    # globals()['content_models'] = read_yaml_file('content_models.yml')
+
+    # Get Batch Model.
+    globals()['model'] = args.model
+    logger.info(f"Batch Model: {model}")
+    if not is_target_in_list(model.lower(), allowed_models):
+        logger.error(f"Model: {model} is not in the list of allowed_models.")
+        print(f"Model: {model} is not in the list of allowed_models.")
+
+    # Show Model path.
+    globals()['model_paths'] = get_model_paths(model,models)
+    logger.info(f"Model Path: {model_paths[0]}")
+    print(f"Model Path: {model_paths[0]}")
+    print(f"{json.dumps(model_paths[0],indent=4)}")
+
 
     # Get external command paths.
     gm_path = shutil.which("gm")
@@ -977,8 +1593,8 @@ def main():
     if gm_path:
         logger.info(f"GraphicsMagick Executable found at: {gm_path}")
     else:
-        logger.error(f"GraphicsMagick Executable 'gm' not found and is required.")
-        print(f"GraphicsMagick Executable 'gm' not found and is required.")
+        logger.error(f"GraphicsMagick Executable 'gm' not found in PATH and is required.")
+        print(f"GraphicsMagick Executable 'gm' not found in PATH and is required.")
         print(f"Exiting...")
         exit()
 
@@ -987,13 +1603,28 @@ def main():
     print(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     df = read_google_sheet(google_sheet_id, google_sheet_name, google_credentials)
 
-    # Scan the directory and return a list of directory contents.
-    logger.info(f"Scan the directory: {args.directory}")
-    file_data = scan_directory(args.directory)
+    # Ensure all required_columns exist.
+    for col in required_columns:
+        df = add_column(df,col)
 
     # Process the contents.
-    logger.info(f"Process the directory: {args.directory}")
-    process_objects(file_data,args.directory,df)
+    globals()['top'] = args.directory
+    logger.info(f"Process the directory: {top}")
+    updated_df = process_objects(df,top,0)
+
+    # Save the DataFrame to Google Sheets.
+    logger.info(f"Updating Google Sheet with DataFrame.")
+    print(f"Updating Google Sheet with DataFrame.")
+    success,msg = update_google_sheet(updated_df, google_sheet_id, google_sheet_name, google_credentials)
+    if (success):
+        logger.info(f"Successfully Updated Google Sheet.")
+        print(f"Successfully Updated Google Sheet.")
+    else:
+        logger.warning(f"Failed to update Google Sheet: {msg}")
+        print(f"Failed to update Google Sheet: {msg}")
+
+    # Display df
+    print(f"Dataframe:\n{updated_df}")
 
     exit()
 
@@ -1005,5 +1636,3 @@ google_sheet_name = None
 
 if __name__ == "__main__":
     main()
-
-

@@ -7,15 +7,23 @@ few types of file directory layouts relating to these types of objects:
 
 - Books
 
+- Compound Books
+
 - Manuscripts
 
-- Newspaper Issues
+- Newspaper/Serial Issues (Paged)
+
+- Newspaper/Serial Issues (PDF)
 
 - Audio (Oral Histories or General Audio files)
 
 - Video (Oral Histories or General Videos)
 
-- Images
+- Image (Single Image)
+
+- PDF (Single File)
+
+- Page (Single Page)
 
 Currently no other object types are addressed, but the script will
 identify and add them as it finds them.
@@ -35,27 +43,40 @@ contents):
 
 Sheet Columns:
 
-  -----------------------------------------------------------------------
-  Required Columns         Description
-  ------------------------ ----------------------------------------------
-  'id'                     The PID of the object. This column must exist.
-
-  'file'                   Leave this empty but the column must exist.
+  |------------------------|----------------------------------------------|
+  |Required Columns        | Description |
+  |------------------------|----------------------------------------------|
+  |'id'                    |The PID of the object. This column must exist.|
+  |---                     |--- |
+  |'file'                  |Leave this empty but the column must exist.
                            This field will be updated by the script with
-                           the full path to the file.
+                           the full path to the file.|
+  |---                     |--- |
+  |'model'                 | This column will be added. This is the Islandora 
+						   Model.|
+  |---                     |--- |
+  |'field_model'           |This column will be added. This is the Islanodra
+                           Model Taxonomy ID.|
+  |---                     |--- |
+  |'field_weight'          |This column will be added. This is the order of 
+                           the objects in the sheet if it can be determined.|
+  |---                     |--- |
+  |'field_resource_type'   |This column will be added. This is the Resource 
+						   Type of the object in the sheet.|
+  |---                     |--- |
 
-  Optional Columns         
 
-  'thumbnail'              Used for A/V media. If a .jpg or .png file is
+  |------------------------|-----------------------------------------------|
+  |Optional Columns        | Description | 
+  |------------------------|-----------------------------------------------|
+  |'thumbnail'             |Used for A/V media. If a .jpg or .png file is
                            found the full path to the file will be added
-                           to this column.
-
-  'transcript'             Used for A/V media. If a .srt or .vtt file is
+                           to this column.|
+  |---                     |--- |
+  |'transcript'            |Used for A/V media. If a .srt or .vtt file is
                            found the full path to the file will be added
-                           to this column.
-
-                           
-  -----------------------------------------------------------------------
+                           to this column.|
+  |------------------------|-----------------------------------------------|
 
 Script Parameters:
 

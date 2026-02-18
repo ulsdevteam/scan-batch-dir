@@ -43,9 +43,9 @@ contents):
 
 Sheet Columns:
 
-  |------------------------|----------------------------------------------|
+  |--- |--- |
   |Required Columns        | Description |
-  |------------------------|----------------------------------------------|
+  |--- |--- |
   |'id'                    |The PID of the object. This column must exist.|
   |---                     |--- |
   |'file'                  |Leave this empty but the column must exist.
@@ -66,9 +66,9 @@ Sheet Columns:
   |---                     |--- |
 
 
-  |------------------------|-----------------------------------------------|
+  |--- |--- |
   |Optional Columns        | Description | 
-  |------------------------|-----------------------------------------------|
+  |--- |--- |
   |'thumbnail'             |Used for A/V media. If a .jpg or .png file is
                            found the full path to the file will be added
                            to this column.|
@@ -76,7 +76,7 @@ Sheet Columns:
   |'transcript'            |Used for A/V media. If a .srt or .vtt file is
                            found the full path to the file will be added
                            to this column.|
-  |------------------------|-----------------------------------------------|
+  |--- |--- |
 
 Script Parameters:
 

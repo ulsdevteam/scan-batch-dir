@@ -1373,16 +1373,6 @@ def main():
             'resource_type': 'Collection',
             'child': 'Audio',
         },
-        'Compound Audio 2': {
-            'model': 'Compound Object',
-            'resource_type': 'Collection',
-            'child': 'COA',
-        },
-        'COA': {
-            'model': 'Compound Object',
-            'resource_type': 'Collection',
-            'child': 'Audio',
-        },
         'Compound Book': {
             'model': 'Compound Object',
             'resource_type': 'Collection',
@@ -1393,22 +1383,7 @@ def main():
             'resource_type': 'Collection',
             'child': 'Page',
         },
-        'Compound Image 2': {
-            'model': 'Compound Object',
-            'resource_type': 'Collection',
-            'child': 'Image',
-        },
         'Compound Video 1': {
-            'model': 'Compound Object',
-            'resource_type': 'Collection',
-            'child': 'Video',
-        },
-        'Compound Video 2': {
-            'model': 'Compound Object',
-            'resource_type': 'Collection',
-            'child': 'COV',
-        },
-        'COV': {
             'model': 'Compound Object',
             'resource_type': 'Collection',
             'child': 'Video',
@@ -1423,20 +1398,25 @@ def main():
             'resource_type': 'Collection',
             'child': 'None',
         },
-        'Serial': {
+        'Serial 1': {
             'model': 'Newspaper',
             'resource_type': 'Collection',
-            'child': 'Issue',
+            'child': 'Issue 1',
         },
-        'Newspaper': {
+        'Serial 2': {
             'model': 'Newspaper',
             'resource_type': 'Collection',
-            'child': 'Publication Issue',
+            'child': 'Issue 2',
         },
-        'Issue': {
+        'Issue 1': {
             'model': 'Publication Issue',
             'resource_type': 'Collection',
             'child': 'Page',
+        },
+        'Issue 2': {
+            'model': 'Publication Issue',
+            'resouce_type': 'Text',
+            'child': 'File',
         },
         'Publication Issue': {
             'model': 'Publication Issue',
@@ -1505,10 +1485,11 @@ def main():
         "compound book",
         "compound object",
         "collection",
-        "serial",
-        "newspaper",
+        "serial 1",
+        "serial 2",
         "publication issue",
-        "issue",
+        "issue 1",
+        "issue 2",
         "book",
         "digital document",
         "page",
@@ -1584,7 +1565,6 @@ def main():
     logger.info(f"Model Path: {model_paths[0]}")
     print(f"Model Path: {model_paths[0]}")
     print(f"{json.dumps(model_paths[0],indent=4)}")
-
 
     # Get external command paths.
     gm_path = shutil.which("gm")

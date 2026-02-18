@@ -46,24 +46,15 @@ contents):
   |Required Columns        | Description |
   |--- |--- |
   |'id'                    |The PID of the object. This column must exist.|
-  |---                     |--- |
-  |'file'                  |Leave this empty but the column must exist.
-                           This field will be updated by the script with
-                           the full path to the file.|
-  |---                     |--- |
+  |'file'                  |Leave this empty but the column must exist. This field will be updated by the script with the full path to the file.|
   |'model'                 |This column will be added. This is the Islandora Model.|
-  |---                     |--- |
   |'field_model'           |This column will be added. This is the Islanodra Model Taxonomy ID.|
-  |---                     |--- |
   |'field_weight'          |This column will be added. This is the order of the objects in the sheet if it can be determined.|
-  |---                     |--- |
   |'field_resource_type'   |This column will be added. This is the Resource Type of the object in the sheet.|
 
 
   |Optional Columns        | Description | 
-  |--- |--- |
   |'thumbnail'             |Used for A/V media. If a .jpg or .png file is found the full path to the file will be added to this column.|
-  |---                     |--- |
   |'transcript'            |Used for A/V media. If a .srt or .vtt file is found the full path to the file will be added to this column.|
 
 ### Script Parameters:

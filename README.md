@@ -59,31 +59,21 @@ contents):
   |'thumbnail'             |Used for A/V media. If a .jpg or .png file is found the full path to the file will be added to this column.|
   |'transcript'            |Used for A/V media. If a .srt or .vtt file is found the full path to the file will be added to this column.|
 
-### Script Parameters:
+### Script Required Parameters:
 
-  -------------------------------------------------------------------------
-  Required Parameters       Description
-  ------------------------- -----------------------------------------------
-  \--config-file            Full or relative path to the configuration file
-                            used for the script.
+  |Required Parameters      | Description |
+  |--- |--- |
+  |\--config-file           |Full or relative path to the configuration file used for the script.|
+  |\--log-file              |Full or relative path to the log file that will be generated.|
+  |\--directory             |Full path of the directory we wish to scan.|
 
-  \--log-file               Full or relative path to the log file that will
-                            be generated.
+### Script Optional Parameters:        
 
-  \--directory              Full path of the directory we wish to scan.
-
-                            
-
-  Optional Parameters       
-
-  \--in-google-sheet-id     The ID number of the Google Sheet.
-
-  \--in-google-sheet-name   The Name of the Tab in the Google Sheet (E.g.:
-                            Sheet1)
-
-  \--in-google-creds-file   The full or relative path to the Google
-                            Credentials File.
-  -------------------------------------------------------------------------
+  |Optional Parameters      | Description |
+  |--- |--- |
+  |\--in-google-sheet-id    |The ID number of the Google Sheet.|
+  |\--in-google-sheet-name  |The Name of the Tab in the Google Sheet (E.g.: Sheet1)|
+  |\--in-google-creds-file  |The full or relative path to the Google Credentials File.|
 
 ## Google Credentials File:
 

@@ -785,6 +785,17 @@ def get_taxonomy_tid(base_url, vocabulary, term_name, auth_token=None):
 
 
 def process_file(df, file_path: str, level):
+    """
+    Process the found file.
+
+    Parameters:
+        df: The Pandas dataframe.
+        file_path (str): The path to the file.
+        level: The level of the path in relation to the starting directory.
+
+    Returns:
+        df: The updated dataframe.
+    """
     logger.info(f"Function: process_file")
     logger.info(f"Processing File: {file_path}")
     print(f"Processing File: {file_path}")

@@ -650,29 +650,6 @@ def get_file_info(file_path: str):
     return(pid,parent,file,dir,ext)
 
 
-def dump_df_columns(df: pd.DataFrame, columns: list):
-    """
-    Prints a DataFrame containing only the specified columns.
-
-    Parameters:
-        df (pd.DataFrame): The original DataFrame.
-        columns (list): List of column names to include.
-
-    Raises:
-        ValueError: If any requested column does not exist in the DataFrame.
-    """
-    # Validate columns
-    missing_cols = [col for col in columns if col not in df.columns]
-    if missing_cols:
-        logger.error(f"The following columns do not exist in the DataFrame: {missing_cols}")
-
-    # Prints the DataFrame with selected columns
-    with pd.option_context(
-        'display.max_rows', None,
-    ):
-        print(f"Dataframe:\n{df[columns]}")
-
-
 def add_update_dataframe(df: pd.DataFrame, pid: str, row_data):
     """
     Depending upon if the pid exists in the 'id' column of the dataframe

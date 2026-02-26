@@ -1172,9 +1172,6 @@ def get_model(level:int):
     else:
         return model_paths[0][level-1]
 
-def is_target_in_list(target, list):
-    return target in list
-
 def add_column(df: pd.DataFrame, column_name: str, default=None):
     if column_name not in df.columns:
         df[column_name] = default
@@ -1415,7 +1412,7 @@ def main():
     # Get Batch Model.
     globals()['model'] = args.model
     logger.info(f"Batch Model: {model}")
-    if not is_target_in_list(model.lower(), allowed_models):
+    if not (model.lower() in allowed_models):
         logger.error(f"Model: {model} is not in the list of allowed_models.")
         print(f"Model: {model} is not in the list of allowed_models.")
 

@@ -710,7 +710,7 @@ def add_update_dataframe(df: pd.DataFrame, pid: str, row_data):
 def get_value_from_df(df: pd.DataFrame, match_column: str, match_value, return_column: str):
     """
     Given a pandas DataFrame, find the row where match_column == match_value
-    and return the value from return_column.
+    and return the first value from return_column.
 
     Parameters:
         df (pd.DataFrame): The DataFrame to search.

@@ -707,7 +707,7 @@ def add_update_dataframe(df: pd.DataFrame, pid: str, row_data):
             logger.info(f"Adding to DataFrame: Success for PID: {pid}")
             return updated_df
 
-def get_value_from_df(df: pd.DataFrame,match_column: str,match_value,return_column:str):
+def get_value_from_df(df: pd.DataFrame, match_column: str, match_value, return_column: str):
     """
     Given a pandas DataFrame, find the row where match_column == match_value
     and return the value from return_column.

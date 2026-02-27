@@ -28,16 +28,7 @@ few types of file directory layouts relating to these types of objects:
 Currently no other object types are addressed, but the script will
 identify and add them as it finds them.
 
-The script will ignore the following files and directories (including
-contents):
-
-- Directory named 'ignore'
-
-- File named 'manuscript.csv'
-
-- File named 'manuscript.xls'
-
-- File named 'manuscript.xlsx'
+The script will ignore the files and directories (including contents) of the configuration file 'skip' parameter. This is a comma separated list of patterns that the script will not process.  These are file patterns that you do not want to process.
 
 ## Google Sheet requirements:
 

@@ -1129,9 +1129,12 @@ def get_model_paths(start_model: str, models_dict: dict):
     child_paths = get_model_paths(child, models_dict)
     return [[model] + path for path in child_paths]
 
+
 def get_model_info(model: str,models_dict: dict):
     # Check if the starting model exists
     if model not in models_dict:
+        logger.warning(f"get_model_info: {model} not in {models_dict}")
+        print(f"get_model_info: {model} not in {models_dict}")
         return []
 
     model_info = models_dict[model]
@@ -1173,7 +1176,7 @@ def main():
     # The 'resource_type'...
     # The 'child' points to another model with "File" model being the end.
     globals()['models'] = {
-        'Compound Audio 1': {
+        'Compound Audio': {
             'model': 'Compound Object',
             'imodel': 'Compound Object',
             'resource_type': 'Collection',
@@ -1185,13 +1188,13 @@ def main():
             'resource_type': 'Collection',
             'child': 'Paged Content',
         },
-        'Compound Image 1': {
+        'Compound Image': {
             'model': 'Paged Content',
             'imodel': 'Paged Content',
             'resource_type': 'Collection',
             'child': 'Page',
         },
-        'Compound Video 1': {
+        'Compound Video': {
             'model': 'Compound Object',
             'imodel': 'Compound Object',
             'resource_type': 'Collection',
@@ -1209,37 +1212,49 @@ def main():
             'resource_type': 'Collection',
             'child': 'None',
         },
-        'Serial 1': {
-            'model': 'Newspaper',
+        'Serial Paged': {
+            'model': 'Newspaper Paged',
             'imodel': 'Newspaper',
             'resource_type': 'Collection',
-            'child': 'Issue 1',
+            'child': 'Issue Paged',
         },
-        'Serial 2': {
-            'model': 'Newspaper',
+        'Serial PDF': {
+            'model': 'Newspaper PDF',
             'imodel': 'Newspaper',
             'resource_type': 'Collection',
-            'child': 'Issue 2',
+            'child': 'Issue PDF',
         },
-        'Issue 1': {
-            'model': 'Publication Issue 1',
+        'Newspaper Paged': {
+            'model': 'Newspaper Paged',
+            'imodel': 'Newspaper',
+            'resource_type': 'Collection',
+            'child': 'Issue Paged',
+        },
+        'Newspaper PDF': {
+            'model': 'Newspaper PDF',
+            'imodel': 'Newspaper',
+            'resource_type': 'Collection',
+            'child': 'Issue PDF',
+        },
+        'Issue Paged': {
+            'model': 'Publication Issue Paged',
             'imodel': 'Publication Issue',
             'resource_type': 'Collection',
             'child': 'Page',
         },
-        'Issue 2': {
-            'model': 'Publication Issue 2',
+        'Issue PDF': {
+            'model': 'Publication Issue PDF',
             'imodel': 'Publication Issue',
             'resouce_type': 'Text',
             'child': 'File',
         },
-        'Publication Issue 1': {
+        'Publication Issue Paged': {
             'model': 'Publication Issue',
             'imodel': 'Publication Issue',
             'resource_type': 'Collection',
             'child': 'Page',
         },
-        'Publication Issue 2': {
+        'Publication Issue PDF': {
             'model': 'Publication Issue',
             'imodel': 'Publication Issue',
             'resource_type': 'Text',
@@ -1317,11 +1332,11 @@ def main():
         "compound book",
         "compound object",
         "collection",
-        "serial 1",
-        "serial 2",
+        "serial paged",
+        "serial pdf",
         "publication issue",
-        "issue 1",
-        "issue 2",
+        "issue paged",
+        "issue pdf",
         "book",
         "digital document",
         "page",
@@ -1396,12 +1411,12 @@ def main():
     if not (model.lower() in allowed_models):
         logger.error(f"Model: {model} is not in the list of allowed_models.")
         print(f"Model: {model} is not in the list of allowed_models.")
+        sys.exit(1)
 
     # Show Model path.
     globals()['model_paths'] = get_model_paths(model,models)
     logger.info(f"Model Path: {model_paths[0]}")
     print(f"Model Path: {model_paths[0]}")
-    print(f"{json.dumps(model_paths[0],indent=4)}")
 
     # Get external command paths.
     gm_path = shutil.which("gm")

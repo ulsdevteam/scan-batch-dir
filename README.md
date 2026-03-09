@@ -30,6 +30,14 @@ identify and add them as it finds them.
 
 The script will ignore the files and directories (including contents) of the configuration file 'skip' parameter. This is a comma separated list of patterns that the script will not process.  These are file patterns that you do not want to process.
 
+## Script requirements:
+The following requirements are needed to run this script.
+
+  | Description | Version |
+  |--- | --- |
+  | Python Version | 3.12 |
+
+
 ## Google Sheet requirements:
 
 ### Sheet Required Columns:

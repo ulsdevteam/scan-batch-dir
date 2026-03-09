@@ -70,13 +70,13 @@ def read_yaml_file(path: str) -> dict:
         print(f"File not found: {path}. Please check the file path and try again.")
         raise
     except yaml.YAMLError:
-        print(f"Error parsing YAML file: {path}. Please ensure the file is properly formatted.")
+        print(f"Error parsing YAML file: {path}. Please ensure the file is properly formatted.",file=sys.stderr)
         raise
     except ValueError:
-        print(f"Invalid content in YAML file: {path}.")
+        print(f"Invalid content in YAML file: {path}.",file=sys.stderr)
         raise
     except Exception as e:
-        print(f"An unexpected error occurred while reading the YAML file: {str(e)}")
+        print(f"An unexpected error occurred while reading the YAML file: {str(e)}",file=sys.stderr)
         raise e
 
 def setup_logger(name: str, log_file: str, level=logging.DEBUG) -> logging.Logger:

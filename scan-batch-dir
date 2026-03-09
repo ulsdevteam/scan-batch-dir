@@ -20,6 +20,10 @@ from googleapiclient.discovery import build
 
 pd.set_option('future.no_silent_downcasting', True)
 
+# Set the required minimum Python version.
+REQUIRED_MAJOR = 3
+REQUIRED_MINOR = 12
+
 # Setup the log file format.
 log_formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
 
@@ -1356,6 +1360,12 @@ def main():
     #    "newspaper": "Newspaper",
 
 
+    # Check the Python Version.
+    if sys.version_info.major < REQUIRED_MAJOR or (sys.version_info.major === REQUIRED_MAJOR and sys.version_info.minor < REQUIRED_MINOR):
+        print(f"Error: Python {REQUIRED_MAJOR}.{REQUIRED_MINOR} or higher is required.", file=sys.stderr)
+        print(f"Your are using Python {sys.version_info.major}.{sys.version_info.minor}.")
+        sys.exit(1)
+
     # Setup the log file format.
     globals()['log_formatter'] = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
 
@@ -1363,7 +1373,7 @@ def main():
     globals()['args'] = parse_arguments()
 
     # Obtain the user running the script.
-    username            = get_username()
+    username = get_username()
 
     # Get the configuration file contents.
     globals()['cfg'] = read_yaml_file(args.config_file)

@@ -825,21 +825,21 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',imodel)
         logger.info(f"File is model: {imodel}, TID: {field_model}")
 
+        # Handle top level files by adjusting the PID and parent_folder.
+        if not level == 1:
+            # Not in top level folder.
+            pid = f"{parent_folder}-{file_name}"
+        else:
+            pid = f"{file_name}"
+            parent_folder = ''
+
         # Process any .tif files.
         if (file_ext.lower() == ".tif"):
             logger.info("File is type: TIFF")
             print(f"  Type: TIFF")
 
-            # Create .jp2 file.
+            # Create .jp2 file from .tif and set .jp2 file as the file.
             pid,outfile = process_tiff(file_path)
-
-            # Handle top level files.
-            if not level == 1:
-                # Not in top level folder.
-                pid = f"{parent_folder}-{file_name}"
-            else:
-                pid = f"{file_name}"
-                parent_folder = ''
 
             # Build Row Data.
             row_data = {
@@ -853,12 +853,6 @@ def process_file(df: pd.DataFrame, file_path: str, level):
                 'level': level,
                 }
 
-            # Add a page title if it is a model of 'Page'.
-            # if my_model == 'Page':
-            # row_data.update({
-            #   'title': f"{pid}-{file_name}",
-            # })
-
             logger.info(f"Row Data: {row_data}")
 
             # Update Dataframe.
@@ -868,17 +862,10 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         if (file_ext.lower() == ".jp2"):
             print(f"  Type: JP2")
 
-            # Handle Top Level files.
-            if not level == 1:
-                pid = f"{parent_folder}-{file_name}"
-            else:
-                pid = f"{file_name}"
-                parent_folder = ''
-
             # Build Row Data.
             row_data = {
                 'id': pid,
-                'file': outfile,
+                'file': file_path,
                 'parent_id': parent_folder,
                 'field_weight': file_weight,
                 'field_model': field_model,
@@ -896,23 +883,16 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         if (file_ext.lower() == ".mp3"):
             print(f"  Type: Audio")
 
-            # Handle Top Level files.
-            if not level == 1:
-                pid = f"{parent_folder}-{file_name}"
-            else:
-                pid = f"{file_name}"
-                parent_folder = ''
-
             # Build Row Data.
             row_data = {
                 'id': pid,
                 'file': file_path,
                 'parent_id': parent_folder,
-                'level': level,
-                'field_model': field_model,
                 'field_weight': file_weight,
+                'field_model': field_model,
                 'model': imodel,
                 'field_resource_type': resource_type,
+                'level': level,
                 }
 
             logger.info(f"Row Data: {row_data}")
@@ -924,23 +904,16 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         if (file_ext.lower() == ".mkv" or file_ext.lower() == ".mp4"):
             print(f"  Type: Video")
 
-            # Handle Top Level files.
-            if not level == 1:
-                pid = f"{parent_folder}-{file_name}"
-            else:
-                pid = f"{file_name}"
-                parent_folder = ''
-
             # Build Row Data.
             row_data = {
                 'id': pid,
                 'file': file_path,
                 'parent_id': parent_folder,
-                'level': level,
-                'field_model': field_model,
                 'field_weight': file_weight,
+                'field_model': field_model,
                 'model': imodel,
                 'field_resource_type': resource_type,
+                'level': level,
             }
 
             logger.info(f"Row Data: {row_data}")
@@ -952,13 +925,8 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         if (file_ext.lower() == ".srt" or file_ext.lower() == ".vtt"):
             print(f"  Type: Transcript")
 
-            # Handle Top Level files.
-            if not level == 1:
-                pid = f"{parent_folder}-{file_name}"
-            else:
-                pid = f"{file_name}"
-
             # Build Row Data.
+            # For transcription files just update the transcript column.
             row_data = {
                 'transcript': file_path,
             }
@@ -972,16 +940,11 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         if (file_ext.lower() == ".pdf"):
             print(f"  Type: PDF")
 
-            # Handle Top Level files.
-            if not level == 1:
-                pid = f"{parent_folder}-{file_name}"
-            else:
-                pid = f"{file_name}"
-
             # Build Row Data.
             row_data = {
                 'id':   pid,
                 'file': file_path,
+                'parent_id': parent_folder,
                 'field_weight': file_weight,
                 'field_model': field_model,
                 'model': imodel,
@@ -998,16 +961,11 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         if (file_ext.lower() == ".png" or file_ext.lower() == ".jpg"):
             print(f"  Type: Simple Image")
         
-            # Handle Top Level files.
-            if not level == 1:
-                pid = f"{parent_folder}-{file_name}"
-            else:
-                pid = f"{file_name}"
-
             # Build Row Data.
             row_data = {
                 'id':   pid,
                 'file': file_path,
+                'parent_id': parent_folder,
                 'field_weight': file_weight,
                 'field_model': field_model,
                 'model': imodel,

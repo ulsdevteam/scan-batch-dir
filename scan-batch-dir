@@ -514,7 +514,7 @@ def parse_arguments():
     parser.add_argument('--config-file', dest="config_file", required=True, help='Path to the YAML configuration file.')
     parser.add_argument('--log-file', dest="log_file", required=True, help='Path to the log file.')
     parser.add_argument('--directory', dest="directory", required=True, help='Path to the directory to scan.')
-    parser.add_argument('--model', dest="model", required=True, help='The Islandora Model associated with the batch.')
+    parser.add_argument('--model', dest="model", required=True, help='The Islandora Model associated with the batch.', choices=['Book', 'Image','Audio','Video','Page','Issue PDF','Issue Paged','Compound Book','Compound Audio','Compound Image','Compound Video'])
 
     # Optional arguments
     parser.add_argument('--in-google-sheet-id', dest="in_gs_id", help='Google Sheet ID related to the directory.')
@@ -526,7 +526,7 @@ def parse_arguments():
 
     return args
 
-def process_tiff(file_path:str):
+def process_tiff(file_path:str, level):
     """
     Processes a TIFF (.tif) file and converts it to a JP2 (.jp2) file.
 
@@ -544,7 +544,10 @@ def process_tiff(file_path:str):
     # Create the JP2 derivative if it does not already exist.
     # if the JP2 does not exist:
     jp2_path = f"{dir}/{pid}.jp2"
-    out_pid  = f"{parent}-{pid}"
+    if level == 1:
+        out_pid = f"{pid}"
+    else:
+        out_pid  = f"{parent}-{pid}"
 
     logger.info(f"Tiff: Creating JP2: {jp2_path}")
     if not os.path.exists(jp2_path):
@@ -833,151 +836,70 @@ def process_file(df: pd.DataFrame, file_path: str, level):
             pid = f"{file_name}"
             parent_folder = ''
 
+        # Default row_data
+        row_data = {
+            'id': pid,
+            'file': file_path,
+            'parent_id': parent_folder,
+            'field_weight': file_weight,
+            'field_model': field_model,
+            'model': imodel,
+            'field_resource_type': resource_type,
+            'level': level,
+        }
+
+
         # Process any .tif files.
         if (file_ext.lower() == ".tif"):
             logger.info("File is type: TIFF")
-            print(f"  Type: TIFF")
 
             # Create .jp2 file from .tif and set .jp2 file as the file.
-            pid,outfile = process_tiff(file_path)
+            # Override pid, file_path to point to jp2 file.
+            pid,file_path = process_tiff(file_path,level)
 
-            # Build Row Data.
-            row_data = {
-                'id': pid,
-                'file': outfile,
-                'parent_id': parent_folder,
-                'field_weight': file_weight,
-                'field_model': field_model,
-                'model': imodel,
-                'field_resource_type': resource_type,
-                'level': level,
-                }
-
-            logger.info(f"Row Data: {row_data}")
-
-            # Update Dataframe.
-            df = add_update_dataframe(df,pid,row_data)
+            # Override Row Data.
+            row_data['id'] = pid
+            row_data['file'] = file_path
 
         # Process any .jp2 files.
-        if (file_ext.lower() == ".jp2"):
-            print(f"  Type: JP2")
-
-            # Build Row Data.
-            row_data = {
-                'id': pid,
-                'file': file_path,
-                'parent_id': parent_folder,
-                'field_weight': file_weight,
-                'field_model': field_model,
-                'model': imodel,
-                'field_resource_type': resource_type,
-                'level': level,
-                }
-
-            logger.info(f"Row Data: {row_data}")
-
-            # Update Dataframe.
-            df = add_update_dataframe(df,pid,row_data)
+        elif (file_ext.lower() == ".jp2"):
+            logger.info(f"File is type: JP2")
 
         # Process any audio files.
-        if (file_ext.lower() == ".mp3"):
-            print(f"  Type: Audio")
-
-            # Build Row Data.
-            row_data = {
-                'id': pid,
-                'file': file_path,
-                'parent_id': parent_folder,
-                'field_weight': file_weight,
-                'field_model': field_model,
-                'model': imodel,
-                'field_resource_type': resource_type,
-                'level': level,
-                }
-
-            logger.info(f"Row Data: {row_data}")
-
-            # Update Dataframe.
-            df = add_update_dataframe(df,pid,row_data)
+        elif (file_ext.lower() == ".mp3"):
+            logger.info(f"File is type: Audio")
 
         # Process any video files.
-        if (file_ext.lower() == ".mkv" or file_ext.lower() == ".mp4"):
-            print(f"  Type: Video")
-
-            # Build Row Data.
-            row_data = {
-                'id': pid,
-                'file': file_path,
-                'parent_id': parent_folder,
-                'field_weight': file_weight,
-                'field_model': field_model,
-                'model': imodel,
-                'field_resource_type': resource_type,
-                'level': level,
-            }
-
-            logger.info(f"Row Data: {row_data}")
-
-            # Update Dataframe.
-            df = add_update_dataframe(df,pid,row_data)
+        elif (file_ext.lower() == ".mkv" or file_ext.lower() == ".mp4"):
+            logger.info(f"File is type: Video")
 
         # Process any transcription files.
-        if (file_ext.lower() == ".srt" or file_ext.lower() == ".vtt"):
-            print(f"  Type: Transcript")
+        elif (file_ext.lower() == ".srt" or file_ext.lower() == ".vtt"):
+            logger.info(f"File is type: Transcript/Caption")
 
-            # Build Row Data.
+            # Override Row Data.
             # For transcription files just update the transcript column.
-            row_data = {
-                'transcript': file_path,
-            }
-
-            logger.info(f"Row Data: {row_data}")
-
-            # Update Dataframe.
-            df = add_update_dataframe(df,pid,row_data)
+            row_data['transcript'] = file_path
 
         # Process any PDF files.
-        if (file_ext.lower() == ".pdf"):
-            print(f"  Type: PDF")
-
-            # Build Row Data.
-            row_data = {
-                'id':   pid,
-                'file': file_path,
-                'parent_id': parent_folder,
-                'field_weight': file_weight,
-                'field_model': field_model,
-                'model': imodel,
-                'field_resource_type': resource_type,
-                'level': level,
-            }
-
-            logger.info(f"Row Data: {row_data}")
-
-            # Update Dataframe.
-            df = add_update_dataframe(df,pid,row_data)
+        elif (file_ext.lower() == ".pdf"):
+            logger.info(f"File is type: PDF")
 
         # Process any simple image files.
-        if (file_ext.lower() == ".png" or file_ext.lower() == ".jpg"):
-            print(f"  Type: Simple Image")
+        elif (file_ext.lower() == ".png" or file_ext.lower() == ".jpg"):
+            logger.info(f"File is type: Simple Image")
         
-            # Build Row Data.
-            row_data = {
-                'id':   pid,
-                'file': file_path,
-                'parent_id': parent_folder,
-                'field_weight': file_weight,
-                'field_model': field_model,
-                'model': imodel,
-                'field_resource_type': resource_type,
-                'level': level,
-            }
+        # Unrecognized file extension.
+        else:
+            logger.warning(f"File is type: Unknown")
+            row_data = {}
 
+        # Check to see if we have row_data to write to the sheet.
+        if row_data:
             logger.info(f"Row Data: {row_data}")
-
-            # Update Dataframe.
             df = add_update_dataframe(df,pid,row_data)
-
+        else:
+            logger.warning(f"Unrecognized File: {file_path}")
 
         print(f"\n")
 

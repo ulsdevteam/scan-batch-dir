@@ -879,7 +879,9 @@ def process_file(df: pd.DataFrame, file_path: str, level):
 
             # Override Row Data.
             # For transcription files just update the transcript column.
-            row_data['transcript'] = file_path
+            row_data = {
+                'transcript': file_path
+            }
 
         # Process any PDF files.
         elif (file_ext.lower() == ".pdf"):

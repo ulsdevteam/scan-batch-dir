@@ -7,81 +7,72 @@ few types of file directory layouts relating to these types of objects:
 
 - Books
 
+- Compound Books
+
 - Manuscripts
 
-- Newspaper Issues
+- Newspaper/Serial Issues (Paged)
+
+- Newspaper/Serial Issues (PDF)
 
 - Audio (Oral Histories or General Audio files)
 
 - Video (Oral Histories or General Videos)
 
-- Images
+- Image (Single Image)
+
+- PDF (Single File)
+
+- Page (Single Page)
 
 Currently no other object types are addressed, but the script will
 identify and add them as it finds them.
 
-The script will ignore the following files and directories (including
-contents):
+The script will ignore the files and directories (including contents) of the configuration file 'skip' parameter. This is a comma separated list of patterns that the script will not process.  These are file patterns that you do not want to process.
 
-- Directory named 'ignore'
+## Script requirements:
+The following requirements are needed to run this script.
 
-- File named 'manuscript.csv'
+  | Description | Version |
+  |--- | --- |
+  | Python Version | 3.12 |
 
-- File named 'manuscript.xls'
-
-- File named 'manuscript.xlsx'
 
 ## Google Sheet requirements:
 
-Sheet Columns:
+### Sheet Required Columns:
 
-  -----------------------------------------------------------------------
-  Required Columns         Description
-  ------------------------ ----------------------------------------------
-  'id'                     The PID of the object. This column must exist.
+  |Required Columns        | Description |
+  |--- |--- |
+  |'id'                    |The PID of the object. This column must exist.|
+  |'file'                  |Leave this empty but the column must exist. This field will be updated by the script with the full path to the file.|
+  |'model'                 |This column will be added. This is the Islandora Model.|
+  |'field_model'           |This column will be added. This is the Islanodra Model Taxonomy ID.|
+  |'field_weight'          |This column will be added. This is the order of the objects in the sheet if it can be determined.|
+  |'field_resource_type'   |This column will be added. This is the Resource Type of the object in the sheet.|
 
-  'file'                   Leave this empty but the column must exist.
-                           This field will be updated by the script with
-                           the full path to the file.
+### Sheet Optional Columns:
 
-  Optional Columns         
+  |Optional Columns        | Description | 
+  |--- |--- |
+  |'thumbnail'             |Used for A/V media. If a .jpg or .png file is found the full path to the file will be added to this column.|
+  |'transcript'            |Used for A/V media. If a .srt or .vtt file is found the full path to the file will be added to this column.|
 
-  'thumbnail'              Used for A/V media. If a .jpg or .png file is
-                           found the full path to the file will be added
-                           to this column.
+### Script Required Parameters:
 
-  'transcript'             Used for A/V media. If a .srt or .vtt file is
-                           found the full path to the file will be added
-                           to this column.
+  |Required Parameters      | Description |
+  |--- |--- |
+  |\--config-file           |Full or relative path to the configuration file used for the script.|
+  |\--log-file              |Full or relative path to the log file that will be generated.|
+  |\--directory             |Full path of the directory we wish to scan.|
 
-                           
-  -----------------------------------------------------------------------
+### Script Optional Parameters:        
 
-Script Parameters:
-
-  -------------------------------------------------------------------------
-  Required Parameters       Description
-  ------------------------- -----------------------------------------------
-  \--config-file            Full or relative path to the configuration file
-                            used for the script.
-
-  \--log-file               Full or relative path to the log file that will
-                            be generated.
-
-  \--directory              Full path of the directory we wish to scan.
-
-                            
-
-  Optional Parameters       
-
-  \--in-google-sheet-id     The ID number of the Google Sheet.
-
-  \--in-google-sheet-name   The Name of the Tab in the Google Sheet (E.g.:
-                            Sheet1)
-
-  \--in-google-creds-file   The full or relative path to the Google
-                            Credentials File.
-  -------------------------------------------------------------------------
+  |Optional Parameters      | Description |
+  |--- |--- |
+  |\--in-google-sheet-id    |The ID number of the Google Sheet.|
+  |\--in-google-sheet-name  |The Name of the Tab in the Google Sheet (E.g.: Sheet1)|
+  |\--in-google-creds-file  |The full or relative path to the Google Credentials File.|
 
 ## Google Credentials File:
 

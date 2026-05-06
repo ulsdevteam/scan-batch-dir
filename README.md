@@ -50,6 +50,8 @@ The following requirements are needed to run this script.
   |'field_model'           |This column will be added. This is the Islanodra Model Taxonomy ID.|
   |'field_weight'          |This column will be added. This is the order of the objects in the sheet if it can be determined.|
   |'field_resource_type'   |This column will be added. This is the Resource Type of the object in the sheet.|
+  |'parent_id'             |This column will be added. This is the parent ID of the object in the sheet.|
+  |'level'                 |This column will be added. This is level of the object in the number of sub-directories.|
 
 ### Sheet Optional Columns:
 

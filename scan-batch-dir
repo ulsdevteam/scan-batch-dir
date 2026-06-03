@@ -636,25 +636,28 @@ def process_unknown(file_path:str):
 def get_file_info(file_path: str):
     """
     Obtain information about the file_path file.
-
     Args:
         file_path (str) The Path to the file.
-
     Returns:
-        pid     (str) The PID of the file.
+        pid     (str) The PID of the file (everything before the first period).
         parent  (str) The parent directory of the file.
         file    (str) The filename and extension of the file.
         dir     (str) The directory that the file is located in.
-        ext     (str) The file extension of the file.
+        ext     (str) The file extension of the file (everything after the last period).
     """
-    dir,ext = os.path.splitext(file_path)   # Split the file_path into directory and extension.
-    file_name = os.path.basename(dir)       # Get the file_name of the object which will usually be the pid.
-    pid = file_name                         # Assign pid to the last piece of the directory.
-    parent = os.path.basename(os.path.dirname(file_path))
     dir = os.path.dirname(file_path)
-    file = f"{pid}{ext}"
+    full_name = os.path.basename(file_path)      # e.g. "abc.def.ghi.txt"
+    parent = os.path.basename(dir)
 
-    return(pid,parent,file,dir,ext)
+    if '.' in full_name:
+        pid = full_name.split('.')[0]            # Everything before the first period.
+        ext = '.' + full_name.rsplit('.', 1)[1]  # Everything after the last period.
+    else:
+        pid = full_name
+        ext = ''
+
+    file = full_name
+    return (pid, parent, file, dir, ext)
 
 
 def add_update_dataframe(df: pd.DataFrame, pid: str, row_data):

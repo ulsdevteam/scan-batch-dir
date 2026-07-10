@@ -1051,6 +1051,44 @@ def add_column(df: pd.DataFrame, column_name: str, default=None):
         df[column_name] = default
     return df
 
+def write_df_to_excel(df: pd.DataFrame, filepath: str, sheet_name: str = "Sheet1"):
+    """
+    Write a pandas DataFrame to an Excel (.xlsx) file.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to write.
+    filepath : str
+        Path to the output .xlsx file.
+    sheet_name : str, optional
+        Name of the Excel sheet (default is 'Sheet1').
+    """
+    try:
+        with pd.ExcelWriter(filepath, engine="xlsxwriter") as writer:
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+        logger.info(f"DataFrame successfully written to {filepath}")
+    except Exception as e:
+        logger.error(f"Error writing Excel file: {e}")
+        
+def write_df_to_csv(df: pd.DataFrame, filepath: str):
+    """
+    Write a pandas DataFrame to a CSV file.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to write.
+    filepath : str
+        Path to the output .csv file.
+    """
+    try:
+        df.to_csv(filepath, index=False)
+        logger.info(f"DataFrame successfully written to {filepath}")
+    except Exception as e:
+        logger.error(f"Error writing CSV file: {e}")
+
+
 def main():
     """
     Main Process that sets up the environment variables etc and kicks off
@@ -1355,9 +1393,16 @@ def main():
         logger.warning(f"Failed to update Google Sheet: {msg}")
         print(f"Failed to update Google Sheet: {msg}")
 
+    # Write df to Excel file and CSV file.
+    logger.info(f"Writing DataFrame to Excel and CSV files.")
+    print(f"Writing DataFrame to Excel and CSV files.")
+    write_df_to_excel(updated_df,os.path.join(top, "manifest-sbd.xlsx"))
+    write_df_to_csv(updated_df,os.path.join(top, "manifest-sbd.csv"))
+    
     # Display df
     print(f"Dataframe:\n{updated_df}")
 
+    logger.info(f"End log.")
     sys.exit()
 
 

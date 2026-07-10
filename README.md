@@ -131,6 +131,9 @@ If a .jpg or .png file is found, add the full path to the file to the
 If a .srt or .vtt file is found, add the full path to the file to the
 'transcript' column of the Google Sheet.
 
+When complete, a 'manifest-sbd.csv' and 'manifest-sbd.xlsx' file are 
+created in the passed in directory.
+
 ## File/Directory Layout:
 
 ### Manuscripts/Books/Newspaper Issues

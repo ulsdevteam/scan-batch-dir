@@ -130,6 +130,39 @@ def connect_to_google_sheet(credentials_file: str):
 
     except Exception as e:
         raise Exception(f"Failed to create Google Sheets service: {str(e)}")
+    
+def pad_rows(data: list) -> tuple:
+    """
+    Pads each row in the data to ensure all rows have the same length.
+
+    Args:
+        data (list of list): The input data where each inner list represents a row.
+    Returns:
+        headers, rows: A tuple containing the headers and the padded rows.
+    """
+    if not data:
+        return [], []
+
+    # Find the true max width across ALL rows (including the header),
+    # since the Google API silently drops trailing empty cells from every row.
+    max_columns = max(len(row) for row in data)
+    fill_value = None
+    padded_data = [row + [fill_value] * (max_columns - len(row)) for row in data]
+
+    # Split the padded data into headers and rows
+    headers = padded_data[0]
+    rows = padded_data[1:] if len(padded_data) > 1 else []
+
+    # If any header cell is None/empty after padding, give it a placeholder name
+    headers = [
+        col if col not in (None, "") else f"Unnamed_{i}"
+        for i, col in enumerate(headers)
+    ]
+
+    return headers, rows
+
+
+        
 
 def read_google_sheet(spreadsheet_id: str, sheet_name="Sheet1", credentials_file="configuration.json") -> pd.DataFrame:
     """
@@ -164,33 +197,16 @@ def read_google_sheet(spreadsheet_id: str, sheet_name="Sheet1", credentials_file
 
             # Return empty DataFrame
             return pd.DataFrame()
+        
+        # Pad the rows to ensure all rows have the same length
+        headers,rows = pad_rows(data)
 
-        # Find the true max width across ALL rows (including the header),
-        # since the API silently drops trailing empty cells from every row.
-        max_columns = max(len(row) for row in data)
-
-        # Pad every row (including the header row) to the full width.
-        fill_value = None
-        padded_data = [row + [fill_value] * (max_columns - len(row)) for row in data]
-
-        headers = padded_data[0]
-        rows    = padded_data[1:] if len(padded_data) > 1 else []
+        # Create DataFrame
+        df = pd.DataFrame(rows, columns=headers)
         
         logger.info(f"read_google_sheet - Read of Google Sheet Successful.")
         print(f"Read of Google Sheet Successful.")
-
-        # If any header cell is None/empty after padding, give it a placeholder
-        # name so the DataFrame columns are always unique and non-null.
-        headers = [
-            col if col not in (None, "") else f"Unnamed_{i}"
-            for i, col in enumerate(headers)
-        ]
-
-        # Create DataFrame
-        df = pd.DataFrame(padded_rows, columns=headers)
-
-        logger.info(f"read_google_sheet - Read of Google Sheet Successful.")
-        print(f"Read of Google Sheet Successful.")
+        
         return df
 
     except Exception as e:

@@ -800,7 +800,12 @@ def process_file(df: pd.DataFrame, file_path: str, level):
 
         file_folder = os.path.dirname(file_path)        # The Full Path including Directory containing the file.
         base_name = os.path.basename(file_path)         # The Base filename with extension of the file give the file_path.
-        file_name,file_ext = os.path.splitext(base_name)# The Separated Filename and Extension of the Base filename.
+        if '.' in base_name:
+            file_name = base_name.split('.')[0]            # The Base filename without extension of the file give the file_path.
+            file_ext = '.' + base_name.rsplit('.', 1)[1]    # The Extension of the file give the file_path.
+        else:
+            file_name = base_name
+            file_ext = ''
 
         # Set the file weight if the file_name is a digit or contains "-\d{4}"
         file_weight = ''
@@ -883,6 +888,7 @@ def process_file(df: pd.DataFrame, file_path: str, level):
             # Override Row Data.
             # For transcription files just update the transcript column.
             row_data = {
+                'id': pid,
                 'transcript': file_path
             }
 

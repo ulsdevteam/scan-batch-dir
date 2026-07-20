@@ -747,6 +747,129 @@ def get_value_from_df(df: pd.DataFrame, match_column: str, match_value, return_c
     else:
         return None
 
+# -------------------------------------------------------------------------------
+
+def get_taxonomy_terms(base_url, vocabulary, auth_token=None):
+    """
+    Fetch taxonomy term ID (tid) from Drupal JSON:API given term name.
+
+    Parameters:
+        base_url (str): Base URL of the Drupal site (e.g., 'https://example.com').
+        vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
+        auth_token (str): Optional Bearer token for authentication.
+
+    Returns:
+        str or None: The taxonomy JSON term if found, else None.
+    """
+    # JSON:API endpoint for taxonomy terms
+    url = f"{base_url}/jsonapi/taxonomy_term/{vocabulary}"
+
+    headers = {
+        "Accept": "application/vnd.api+json"
+    }
+
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as errh:
+        logger.error(f"get_taxonomy_terms - HTTP error: {errh}")
+        print(f"HTTP error: {errh}")    
+    except requests.exceptions.ConnectionError as errc:
+        logger.error(f"get_taxonomy_terms - Connection error: {errc}")
+        print(f"Connection error: {errc}")
+    except requests.exceptions.Timeout as errt:
+        logger.error(f"get_taxonomy_terms - Timeout error: {errt}")
+        print(f"Timeout error: {errt}")
+    except requests.exceptions.RequestException as err:
+        logger.error(f"get_taxonomy_terms - Unexpected error: {err}")
+        print(f"Unexpected error: {err}")
+    else:
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("data"):
+                return data["data"]
+            else:
+                return None
+        else:
+            logger.error(f"get_taxonomy_terms - Error {response.status_code}: {response.text}")
+            
+def get_taxonomy_term_tid(base_url, vocabulary, term_name, auth_token=None):
+    """
+    Fetch taxonomy term ID (tid) from Drupal JSON:API given term name.
+
+    Parameters:
+        base_url (str): Base URL of the Drupal site (e.g., 'https://example.com').
+        vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
+        term_name (str): Name of the taxonomy term to search.
+        auth_token (str): Optional Bearer token for authentication.
+        
+    Returns:
+        str or None: The taxonomy term ID if found, else None.
+    """
+    data = get_taxonomy_terms(base_url, vocabulary, auth_token)
+    if not data:
+        logger.warning(f"get_taxonomy_term_tid - No data returned for vocabulary '{vocabulary}'")
+        return None
+    for term in data:
+        if term and "attributes" in term \
+            and term["attributes"].get("name") == term_name \
+            and "drupal_internal__tid" in term["attributes"]:
+                logger.info(f"get_taxonomy_term_tid - Found term '{term_name}' with tid: {term['attributes']['drupal_internal__tid']}")
+            return term["attributes"]["drupal_internal__tid"]
+    # Only return None if no matching term is found.
+    return None
+    
+def get_taxonomy_term_name(base_url, vocabulary, tid, auth_token=None):
+    """
+    Fetch taxonomy term name from Drupal JSON:API given term ID (tid).
+
+    Parameters:
+        base_url (str): Base URL of the Drupal site (e.g., 'https://example.com').
+        vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
+        tid (str): Taxonomy term ID to search.
+        auth_token (str): Optional Bearer token for authentication.
+        
+    Returns:
+        str or None: The taxonomy term name if found, else None.
+    """
+    # JSON:API endpoint for taxonomy terms
+    data = get_taxonomy_terms(base_url, vocabulary, auth_token)
+    if not data:
+        logger.warning(f"get_taxonomy_term_name - No data returned for vocabulary '{vocabulary}'")
+        return None
+    for term in data:
+        if term and "attributes" in term \
+            and term["attributes"].get("drupal_internal__tid") == tid \
+            and "name" in term["attributes"]:
+                logger.info(f"get_taxonomy_term_name - Found tid '{tid}' with name: {term['attributes']['name']}")
+            return term["attributes"]["name"]
+    # Only return None if no matching term is found.
+    return None
+
+def get_taxonomy_terms_dict(base_url, vocabulary, auth_token=None):
+    """
+    Fetch all taxonomy terms from Drupal JSON:API and return a dictionary mapping term names to their IDs.
+
+    Parameters:
+        base_url (str): Base URL of the Drupal site (e.g., 'https://example.com').
+        vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
+        auth_token (str): Optional Bearer token for authentication.
+
+    Returns:
+        dict: A dictionary where keys are term names and values are their corresponding term IDs.
+    """
+    data = get_taxonomy_terms(base_url, vocabulary, auth_token)
+    terms_dict = {}
+    if data:
+        for term in data:
+            if term and "attributes" in term:
+                name = term["attributes"].get("name")
+                tid = term["attributes"].get("drupal_internal__tid")
+                if name and tid:
+                    terms_dict[name] = tid
+    return terms_dict
 
 def get_taxonomy_tid(base_url, vocabulary, term_name, auth_token=None):
     """
@@ -841,8 +964,6 @@ def process_file(df: pd.DataFrame, file_path: str, level):
 
         # Get the model from the map.
         my_model = get_model(level)
-        #field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',my_model)
-        #logger.info(f"File is model: {my_model}, TID: {field_model}")
 
         # Get model info from the map.
         model_info = get_model_info(my_model,models)
@@ -850,7 +971,8 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         imodel = model_info.get('imodel','None')
 
         # Get the field_model from JSONAPI
-        field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',imodel)
+        #field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',imodel)
+        field_model = get_taxonomy_term_tid('https://digital.library.pitt.edu','islandora_models',imodel)
         logger.info(f"File is model: {imodel}, TID: {field_model}")
 
         # Handle top level files by adjusting the PID and parent_folder.

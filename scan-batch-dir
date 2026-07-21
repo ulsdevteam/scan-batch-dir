@@ -981,8 +981,8 @@ def process_file(df: pd.DataFrame, file_path: str, level):
             'file': file_path,
             'parent_id': parent_folder,
             'field_weight': file_weight,
-            'field_model': field_model,
-            'model': imodel,
+            'field_model': imodel,
+            'model': field_model,
             'field_resource_type': resource_type,
             'level': level,
         }
@@ -1097,8 +1097,8 @@ def process_objects(df: pd.DataFrame, directory: str, level):
             'id': pid,
             'level': level,
             'parent_id': parent_folder,
-            'model': imodel,
-            'field_model': field_model,
+            'model': field_model,
+            'field_model': imodel,
             'field_resource_type': resource_type,
         }
         df = add_update_dataframe(df,pid,row_data)
@@ -1107,8 +1107,8 @@ def process_objects(df: pd.DataFrame, directory: str, level):
         row_data = {
             'id': pid,
             'level': level,
-            'model': imodel,
-            'field_model': field_model,
+            'model': field_model,
+            'field_model': imodel,
             'field_resource_type': resource_type,
         }
         df = add_update_dataframe(df,pid,row_data)

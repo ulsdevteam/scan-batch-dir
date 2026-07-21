@@ -816,7 +816,7 @@ def get_taxonomy_term_tid(base_url, vocabulary, term_name, auth_token=None):
         if term and "attributes" in term \
             and term["attributes"].get("name") == term_name \
             and "drupal_internal__tid" in term["attributes"]:
-                logger.info(f"get_taxonomy_term_tid - Found term '{term_name}' with tid: {term['attributes']['drupal_internal__tid']}")
+            logger.info(f"get_taxonomy_term_tid - Found term '{term_name}' with tid: {term['attributes']['drupal_internal__tid']}")
             return term["attributes"]["drupal_internal__tid"]
     # Only return None if no matching term is found.
     return None
@@ -843,7 +843,7 @@ def get_taxonomy_term_name(base_url, vocabulary, tid, auth_token=None):
         if term and "attributes" in term \
             and term["attributes"].get("drupal_internal__tid") == tid \
             and "name" in term["attributes"]:
-                logger.info(f"get_taxonomy_term_name - Found tid '{tid}' with name: {term['attributes']['name']}")
+            logger.info(f"get_taxonomy_term_name - Found tid '{tid}' with name: {term['attributes']['name']}")
             return term["attributes"]["name"]
     # Only return None if no matching term is found.
     return None
@@ -870,6 +870,8 @@ def get_taxonomy_terms_dict(base_url, vocabulary, auth_token=None):
                 if name and tid:
                     terms_dict[name] = tid
     return terms_dict
+
+# Remove this function in place of get_taxonomy_term_tid and get_taxonomy_term_name if you want to use the dictionary approach for efficiency.
 
 def get_taxonomy_tid(base_url, vocabulary, term_name, auth_token=None):
     """
@@ -962,6 +964,7 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         parent_path   = os.path.dirname(file_path)
         parent_folder = os.path.basename(parent_path)
 
+        """
         # Get the model from the map.
         my_model = get_model(level)
 
@@ -969,11 +972,16 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         model_info = get_model_info(my_model,models)
         resource_type = model_info.get('resource_type','None')
         imodel = model_info.get('imodel','None')
+        #field_model = imodel
 
         # Get the field_model from JSONAPI
         #field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',imodel)
         field_model = get_taxonomy_term_tid('https://digital.library.pitt.edu','islandora_models',imodel)
         logger.info(f"File is model: {imodel}, TID: {field_model}")
+        """
+        
+        # Get model details from the map.
+        my_model, imodel, field_model, resource_type = get_model_details(level)
 
         # Handle top level files by adjusting the PID and parent_folder.
         if not level == 1:
@@ -1095,12 +1103,17 @@ def process_objects(df: pd.DataFrame, directory: str, level):
     parent_path   = os.path.dirname(directory)
     parent_folder = os.path.basename(parent_path)
 
+    """
     # Set model.
     my_model = get_model(level)
 
     # Get the resource_type from the map
     model_info = get_model_info(my_model,models)
     resource_type = model_info.get('resource_type','None')
+    """
+    
+    # Get model details from the map.
+    my_model, imodel, field_model, resource_type = get_model_details(level)
 
     # if level > 1
     if level > 1:
@@ -1109,7 +1122,8 @@ def process_objects(df: pd.DataFrame, directory: str, level):
             'id': pid,
             'level': level,
             'parent_id': parent_folder,
-            'model': my_model,
+            'model': imodel,
+            'field_model': field_model,
             'field_resource_type': resource_type,
         }
         df = add_update_dataframe(df,pid,row_data)
@@ -1118,7 +1132,8 @@ def process_objects(df: pd.DataFrame, directory: str, level):
         row_data = {
             'id': pid,
             'level': level,
-            'model': my_model,
+            'model': imodel,
+            'field_model': field_model,
             'field_resource_type': resource_type,
         }
         df = add_update_dataframe(df,pid,row_data)
@@ -1192,6 +1207,26 @@ def get_model(level:int):
         return model_paths[0][0]
     else:
         return model_paths[0][level-1]
+
+def get_model_details(level, base_url='https://digital.library.pitt.edu', vocabulary='islandora_models'):
+    """
+    Given a directory/file level, resolve the model info, imodel, field_model
+    (taxonomy tid), and resource_type for that level.
+
+    Args:
+        level (int): The current depth in the object hierarchy.
+        base_url (str): Drupal base URL for taxonomy lookup.
+        vocabulary (str): Taxonomy vocabulary machine name.
+
+    Returns:
+        tuple: (my_model, imodel, field_model, resource_type)
+    """
+    my_model = get_model(level)
+    model_info = get_model_info(my_model, models)
+    resource_type = model_info.get('resource_type', 'None')
+    imodel = model_info.get('imodel', 'None')
+    field_model = get_taxonomy_term_tid(base_url, vocabulary, imodel)
+    return my_model, imodel, field_model, resource_type
 
 def add_column(df: pd.DataFrame, column_name: str, default=None):
     if column_name not in df.columns:
@@ -1324,7 +1359,7 @@ def main():
         'Issue PDF': {
             'model': 'Publication Issue PDF',
             'imodel': 'Publication Issue',
-            'resouce_type': 'Text',
+            'resource_type': 'Text',
             'child': 'File',
         },
         'Publication Issue Paged': {

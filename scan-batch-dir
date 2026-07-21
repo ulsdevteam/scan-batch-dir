@@ -569,7 +569,7 @@ def process_tiff(file_path:str, level):
         print(f"  Creating JP2:\n    In: {file_path}\n    Out: {jp2_path}")
         convert_tiff_to_jp2(file_path, jp2_path)
     else:
-        logger.warning("JP2 Already Exists: {jp2_path}")
+        logger.warning(f"JP2 Already Exists: {jp2_path}")
         print(f"  JP2 Already Exists: {jp2_path}")
 
     return out_pid,jp2_path

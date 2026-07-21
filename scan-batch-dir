@@ -569,10 +569,6 @@ def process_tiff(file_path:str, level):
     # Create the JP2 derivative if it does not already exist.
     # if the JP2 does not exist:
     jp2_path = f"{dir}/{pid}.jp2"
-    #if level == 1:
-    #    out_pid = f"{pid}"
-    #else:
-    #    out_pid  = f"{parent}-{pid}"
     out_pid = f"{pid}"
 
     logger.info(f"Tiff: Creating JP2: {jp2_path}")
@@ -853,15 +849,11 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         # Get the field_model from JSONAPI
         field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',imodel)
         logger.info(f"File is model: {imodel}, TID: {field_model}")
-
-        # Handle top level files by adjusting the PID and parent_folder.
-        #if not level == 1:
-        #    # Not in top level folder.
-        #    pid = f"{parent_folder}-{file_name}"
-        #else:
-        #    pid = f"{file_name}"
-        #    parent_folder = ''
         
+        # Handle top level files by adjusting the PID and parent_folder.
+        # The file's own name is always the PID; the parent object's PID
+        # is tracked separately via parent_id — it should never be
+        # concatenated onto the file's PID.
         pid = f"{file_name}"
         if level == 1:
             parent_folder = ''

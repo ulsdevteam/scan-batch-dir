@@ -545,6 +545,7 @@ def parse_arguments():
     parser.add_argument('--in-google-sheet-id', dest="in_gs_id", help='Google Sheet ID related to the directory.')
     parser.add_argument('--in-google-sheet-name', dest="in_gs_name", help='Google Sheet Tab Name.')
     parser.add_argument('--in-google-creds-file', dest="in_gs_creds", help='Google Credentials json file.')
+    parser.add_argument('--base-url', dest="islandora_base_url", help='Base URL of the Islandora instance.')
 
     # Parse Arguments
     args = parser.parse_args()
@@ -1183,15 +1184,13 @@ def get_model(level:int):
     else:
         return model_paths[0][level-1]
 
-def get_model_details(level, base_url='https://digital.library.pitt.edu', vocabulary='islandora_models'):
+def get_model_details(level):
     """
     Given a directory/file level, resolve the model info, imodel, field_model
     (taxonomy tid), and resource_type for that level.
 
     Args:
         level (int): The current depth in the object hierarchy.
-        base_url (str): Drupal base URL for taxonomy lookup.
-        vocabulary (str): Taxonomy vocabulary machine name.
 
     Returns:
         tuple: (imodel, field_model, resource_type)
@@ -1265,7 +1264,7 @@ def main():
     # Model should eventually arive at a "File" model.
     # The 'model' is obtained from the list of models in Islandora 2.
     # All 'model' should be referenced below as a possible type.
-    # The 'resource_type'...
+    # The 'resource_type' is obtained from the list of resource types in Islandora 2.
     # The 'child' points to another model with "File" model being the end.
     globals()['models'] = {
         'Compound Audio': {
@@ -1413,10 +1412,8 @@ def main():
         },
     }
 
-
     # Valid models.
     # This is the list of valid models that we will work with.
-    #
     globals()['allowed_models'] = [
         "compound audio",
         "compound video",
@@ -1438,15 +1435,6 @@ def main():
         "pdf",
         "binary"
     ]
-
-    ### Other models:
-    #    "collection": "Collection",
-    #    "digital document": "Digital Document",
-    #    "paged content": "Paged Content",
-    #    "publication issue": "Publication Issue",
-    #    "compound object": "Compound Object",
-    #    "newspaper": "Newspaper",
-
 
     # Check the Python Version.
     if sys.version_info.major < REQUIRED_MAJOR or (sys.version_info.major == REQUIRED_MAJOR and sys.version_info.minor < REQUIRED_MINOR):
@@ -1472,6 +1460,7 @@ def main():
     globals()['google_sheet_name']   = cfg['google_sheet_name']
     globals()['log_file']            = cfg['log_file']
     globals()['skip']                = cfg['skip'].split(",")
+    globals()['islandora_base_url']  = cfg['islandora_base_url']
 
     # Override config file variables with command line parameters.
     if args.in_gs_creds is not None:
@@ -1482,6 +1471,8 @@ def main():
         globals()['google_sheet_name'] = args.in_gs_name
     if args.log_file is not None:
         globals()['log_file'] = args.log_file
+    if args.islandora_base_url is not None:
+        globals()['islandora_base_url'] = args.islandora_base_url
 
     # Required Sheet Columns:
     globals()['required_columns'] = ["id","file","level","parent_id",
@@ -1499,9 +1490,7 @@ def main():
     logger.info(f"Google Credentials: {google_credentials}")
     logger.info(f"Google Sheet ID: {google_sheet_id}")
     logger.info(f"Google Sheet Name: {google_sheet_name}")
-
-    # Read Content Models - Proposed for later.
-    # globals()['content_models'] = read_yaml_file('content_models.yml')
+    logger.info(f"Islandora Base URL: {islandora_base_url}")
 
     # Get Batch Model.
     globals()['model'] = args.model
@@ -1541,7 +1530,7 @@ def main():
     logger.info(f"Fetching Islandora Models taxonomy terms.")
     print(f"Fetching Islandora Models taxonomy terms.")
     globals()['imodel_tid_map'] = get_taxonomy_terms_dict(
-        'https://digital.library.pitt.edu', 'islandora_models'
+        islandora_base_url, 'islandora_models'
     )
     logger.info(f"Cached {len(imodel_tid_map)} taxonomy terms.")
     

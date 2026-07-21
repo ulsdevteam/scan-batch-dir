@@ -963,25 +963,9 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         # Set parent information.
         parent_path   = os.path.dirname(file_path)
         parent_folder = os.path.basename(parent_path)
-
-        """
-        # Get the model from the map.
-        my_model = get_model(level)
-
-        # Get model info from the map.
-        model_info = get_model_info(my_model,models)
-        resource_type = model_info.get('resource_type','None')
-        imodel = model_info.get('imodel','None')
-        #field_model = imodel
-
-        # Get the field_model from JSONAPI
-        #field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',imodel)
-        field_model = get_taxonomy_term_tid('https://digital.library.pitt.edu','islandora_models',imodel)
-        logger.info(f"File is model: {imodel}, TID: {field_model}")
-        """
         
         # Get model details from the map.
-        my_model, imodel, field_model, resource_type = get_model_details(level)
+        imodel, field_model, resource_type = get_model_details(level)
 
         # Handle top level files by adjusting the PID and parent_folder.
         if not level == 1:
@@ -1102,18 +1086,9 @@ def process_objects(df: pd.DataFrame, directory: str, level):
     # Set parent information.
     parent_path   = os.path.dirname(directory)
     parent_folder = os.path.basename(parent_path)
-
-    """
-    # Set model.
-    my_model = get_model(level)
-
-    # Get the resource_type from the map
-    model_info = get_model_info(my_model,models)
-    resource_type = model_info.get('resource_type','None')
-    """
     
     # Get model details from the map.
-    my_model, imodel, field_model, resource_type = get_model_details(level)
+    imodel, field_model, resource_type = get_model_details(level)
 
     # if level > 1
     if level > 1:
@@ -1219,14 +1194,17 @@ def get_model_details(level, base_url='https://digital.library.pitt.edu', vocabu
         vocabulary (str): Taxonomy vocabulary machine name.
 
     Returns:
-        tuple: (my_model, imodel, field_model, resource_type)
+        tuple: (imodel, field_model, resource_type)
     """
     my_model = get_model(level)
     model_info = get_model_info(my_model, models)
     resource_type = model_info.get('resource_type', 'None')
     imodel = model_info.get('imodel', 'None')
-    field_model = get_taxonomy_term_tid(base_url, vocabulary, imodel)
-    return my_model, imodel, field_model, resource_type
+    
+    field_model = imodel_tid_map.get(imodel)
+    if field_model is None:
+        logger.warning(f"get_model_details - No taxonomy tid found for imodel '{imodel}'")
+    return imodel, field_model, resource_type
 
 def add_column(df: pd.DataFrame, column_name: str, default=None):
     if column_name not in df.columns:
@@ -1558,6 +1536,19 @@ def main():
     # Ensure all required_columns exist.
     for col in required_columns:
         df = add_column(df,col)
+        
+    # Fetch taxonomy terms once and cache as a name->tid dict.
+    logger.info(f"Fetching Islandora Models taxonomy terms.")
+    print(f"Fetching Islandora Models taxonomy terms.")
+    globals()['imodel_tid_map'] = get_taxonomy_terms_dict(
+        'https://digital.library.pitt.edu', 'islandora_models'
+    )
+    logger.info(f"Cached {len(imodel_tid_map)} taxonomy terms.")
+    
+    # Check if the taxonomy terms were successfully fetched.
+    if not imodel_tid_map:
+        logger.error("Failed to fetch taxonomy terms - field_model values will be empty for this run.")
+        print("Warning: Failed to fetch taxonomy terms. Continuing, but field_model will be blank.")
 
     # Process the contents.
     globals()['top'] = args.directory

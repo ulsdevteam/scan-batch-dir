@@ -17,3 +17,7 @@ log_file: /path/to/file.log
 #--------------------------------------------------------------------
 # Skip patterns - Directory/File patterns to ignored.
 skip: ignore,meta,.jp2,.metadata,.opex,.fits,target.tif,metadata.csv,metadata.xlsx,manifest.xlsx,manifest.csv
+
+#--------------------------------------------------------------------
+# Islandora Base URL for API lookups.
+islandora_base_url: https://your.islandora.server

@@ -37,18 +37,6 @@ def get_username() -> str:
     """
     return pwd.getpwuid(os.getuid())[0]
 
-def create_temp_dir_at_path(path: str) -> str:
-    """Creates a temporary directory at the specified path.
-
-    Args:
-        path: The path where the temporary directory should be created.
-
-    Returns:
-        The path to the created temporary directory.
-    """
-    temp_dir = tempfile.mkdtemp(dir=path)
-    return temp_dir
-
 def read_yaml_file(path: str) -> dict:
     """
     Reads a YAML file and returns its content as a dictionary.
@@ -160,9 +148,6 @@ def pad_rows(data: list) -> tuple:
     ]
 
     return headers, rows
-
-
-        
 
 def read_google_sheet(spreadsheet_id: str, sheet_name="Sheet1", credentials_file="configuration.json") -> pd.DataFrame:
     """
@@ -317,13 +302,13 @@ def add_row_to_dataframe(df, row_data, key_column):
     """
     Add a new row to a pandas DataFrame, ensuring the key column value is unique.
 
-    Parameters:
-    df (pandas.DataFrame): The input DataFrame
-    row_data (dict): Dictionary containing the new row data with column names as keys
-    key_column (str): The column name to check for uniqueness
+    Args:
+        df (pandas.DataFrame): The input DataFrame
+        row_data (dict): Dictionary containing the new row data with column names as keys
+        key_column (str): The column name to check for uniqueness
 
     Returns:
-    pandas.DataFrame: DataFrame with the new row appended if key is unique, original DataFrame otherwise
+        pandas.DataFrame: DataFrame with the new row appended if key is unique, original DataFrame otherwise
     """
     try:
         # Verify input is a DataFrame
@@ -545,6 +530,7 @@ def parse_arguments():
     parser.add_argument('--in-google-sheet-id', dest="in_gs_id", help='Google Sheet ID related to the directory.')
     parser.add_argument('--in-google-sheet-name', dest="in_gs_name", help='Google Sheet Tab Name.')
     parser.add_argument('--in-google-creds-file', dest="in_gs_creds", help='Google Credentials json file.')
+    parser.add_argument('--base-url', dest="islandora_base_url", help='Base URL of the Islandora instance.')
 
     # Parse Arguments
     args = parser.parse_args()
@@ -580,7 +566,7 @@ def process_tiff(file_path:str, level):
         print(f"  Creating JP2:\n    In: {file_path}\n    Out: {jp2_path}")
         convert_tiff_to_jp2(file_path, jp2_path)
     else:
-        logger.warning("JP2 Already Exists: {jp2_path}")
+        logger.warning(f"JP2 Already Exists: {jp2_path}")
         print(f"  JP2 Already Exists: {jp2_path}")
 
     return out_pid,jp2_path
@@ -721,7 +707,7 @@ def get_value_from_df(df: pd.DataFrame, match_column: str, match_value, return_c
     Given a pandas DataFrame, find the row where match_column == match_value
     and return the first value from return_column.
 
-    Parameters:
+    Args:
         df (pd.DataFrame): The DataFrame to search.
         match_column (str): Column name to match on.
         match_value: Value to look for in match_column.
@@ -747,6 +733,131 @@ def get_value_from_df(df: pd.DataFrame, match_column: str, match_value, return_c
     else:
         return None
 
+# -------------------------------------------------------------------------------
+
+def get_taxonomy_terms(base_url, vocabulary, auth_token=None):
+    """
+    Fetch taxonomy term ID (tid) from Drupal JSON:API given term name.
+
+    Args:
+        base_url (str): Base URL of the Drupal site (e.g., 'https://example.com').
+        vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
+        auth_token (str): Optional Bearer token for authentication.
+
+    Returns:
+        str or None: The taxonomy JSON term if found, else None.
+    """
+    # JSON:API endpoint for taxonomy terms
+    url = f"{base_url}/jsonapi/taxonomy_term/{vocabulary}"
+
+    headers = {
+        "Accept": "application/vnd.api+json"
+    }
+
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as errh:
+        logger.error(f"get_taxonomy_terms - HTTP error: {errh}")
+        print(f"HTTP error: {errh}")    
+    except requests.exceptions.ConnectionError as errc:
+        logger.error(f"get_taxonomy_terms - Connection error: {errc}")
+        print(f"Connection error: {errc}")
+    except requests.exceptions.Timeout as errt:
+        logger.error(f"get_taxonomy_terms - Timeout error: {errt}")
+        print(f"Timeout error: {errt}")
+    except requests.exceptions.RequestException as err:
+        logger.error(f"get_taxonomy_terms - Unexpected error: {err}")
+        print(f"Unexpected error: {err}")
+    else:
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("data"):
+                return data["data"]
+            else:
+                return None
+        else:
+            logger.error(f"get_taxonomy_terms - Error {response.status_code}: {response.text}")
+            
+def get_taxonomy_term_tid(base_url, vocabulary, term_name, auth_token=None):
+    """
+    Fetch taxonomy term ID (tid) from Drupal JSON:API given term name.
+
+    Args:
+        base_url (str): Base URL of the Drupal site (e.g., 'https://example.com').
+        vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
+        term_name (str): Name of the taxonomy term to search.
+        auth_token (str): Optional Bearer token for authentication.
+        
+    Returns:
+        str or None: The taxonomy term ID if found, else None.
+    """
+    data = get_taxonomy_terms(base_url, vocabulary, auth_token)
+    if not data:
+        logger.warning(f"get_taxonomy_term_tid - No data returned for vocabulary '{vocabulary}'")
+        return None
+    for term in data:
+        if term and "attributes" in term \
+            and term["attributes"].get("name") == term_name \
+            and "drupal_internal__tid" in term["attributes"]:
+            logger.info(f"get_taxonomy_term_tid - Found term '{term_name}' with tid: {term['attributes']['drupal_internal__tid']}")
+            return term["attributes"]["drupal_internal__tid"]
+    # Only return None if no matching term is found.
+    return None
+    
+def get_taxonomy_term_name(base_url, vocabulary, tid, auth_token=None):
+    """
+    Fetch taxonomy term name from Drupal JSON:API given term ID (tid).
+
+    Args:
+        base_url (str): Base URL of the Drupal site (e.g., 'https://example.com').
+        vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
+        tid (str): Taxonomy term ID to search.
+        auth_token (str): Optional Bearer token for authentication.
+        
+    Returns:
+        str or None: The taxonomy term name if found, else None.
+    """
+    # JSON:API endpoint for taxonomy terms
+    data = get_taxonomy_terms(base_url, vocabulary, auth_token)
+    if not data:
+        logger.warning(f"get_taxonomy_term_name - No data returned for vocabulary '{vocabulary}'")
+        return None
+    for term in data:
+        if term and "attributes" in term \
+            and term["attributes"].get("drupal_internal__tid") == tid \
+            and "name" in term["attributes"]:
+            logger.info(f"get_taxonomy_term_name - Found tid '{tid}' with name: {term['attributes']['name']}")
+            return term["attributes"]["name"]
+    # Only return None if no matching term is found.
+    return None
+
+def get_taxonomy_terms_dict(base_url, vocabulary, auth_token=None):
+    """
+    Fetch all taxonomy terms from Drupal JSON:API and return a dictionary mapping term names to their IDs.
+
+    Parameters:
+        base_url (str): Base URL of the Drupal site (e.g., 'https://example.com').
+        vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
+        auth_token (str): Optional Bearer token for authentication.
+
+    Returns:
+        dict: A dictionary where keys are term names and values are their corresponding term IDs.
+    """
+    data = get_taxonomy_terms(base_url, vocabulary, auth_token)
+    terms_dict = {}
+    if data:
+        for term in data:
+            if term and "attributes" in term:
+                name = term["attributes"].get("name")
+                tid = term["attributes"].get("drupal_internal__tid")
+                if name and tid:
+                    terms_dict[name] = tid
+    return terms_dict
+
+# Remove this function in place of get_taxonomy_term_tid and get_taxonomy_term_name if you want to use the dictionary approach for efficiency.
 
 def get_taxonomy_tid(base_url, vocabulary, term_name, auth_token=None):
     """
@@ -805,7 +916,7 @@ def process_file(df: pd.DataFrame, file_path: str, level):
     """
     Process the found file.
 
-    Parameters:
+    Args:
         df: The Pandas dataframe.
         file_path (str): The path to the file.
         level: The level of the path in relation to the starting directory.
@@ -838,20 +949,9 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         # Set parent information.
         parent_path   = os.path.dirname(file_path)
         parent_folder = os.path.basename(parent_path)
-
-        # Get the model from the map.
-        my_model = get_model(level)
-        #field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',my_model)
-        #logger.info(f"File is model: {my_model}, TID: {field_model}")
-
-        # Get model info from the map.
-        model_info = get_model_info(my_model,models)
-        resource_type = model_info.get('resource_type','None')
-        imodel = model_info.get('imodel','None')
-
-        # Get the field_model from JSONAPI
-        field_model = get_taxonomy_tid('https://i2.digital.library.pitt.edu','islandora_models',imodel)
-        logger.info(f"File is model: {imodel}, TID: {field_model}")
+        
+        # Get model details from the map.
+        imodel, field_model, resource_type = get_model_details(level)
 
         # Handle top level files by adjusting the PID and parent_folder.
         if not level == 1:
@@ -867,8 +967,8 @@ def process_file(df: pd.DataFrame, file_path: str, level):
             'file': file_path,
             'parent_id': parent_folder,
             'field_weight': file_weight,
-            'field_model': field_model,
-            'model': imodel,
+            'field_model': imodel,
+            'model': field_model,
             'field_resource_type': resource_type,
             'level': level,
         }
@@ -905,6 +1005,7 @@ def process_file(df: pd.DataFrame, file_path: str, level):
             # Override Row Data.
             # For transcription files just update the transcript column.
             row_data = {
+                'id': pid,
                 'transcript': file_path
             }
 
@@ -972,13 +1073,9 @@ def process_objects(df: pd.DataFrame, directory: str, level):
     # Set parent information.
     parent_path   = os.path.dirname(directory)
     parent_folder = os.path.basename(parent_path)
-
-    # Set model.
-    my_model = get_model(level)
-
-    # Get the resource_type from the map
-    model_info = get_model_info(my_model,models)
-    resource_type = model_info.get('resource_type','None')
+    
+    # Get model details from the map.
+    imodel, field_model, resource_type = get_model_details(level)
 
     # if level > 1
     if level > 1:
@@ -987,7 +1084,8 @@ def process_objects(df: pd.DataFrame, directory: str, level):
             'id': pid,
             'level': level,
             'parent_id': parent_folder,
-            'model': my_model,
+            'model': field_model,
+            'field_model': imodel,
             'field_resource_type': resource_type,
         }
         df = add_update_dataframe(df,pid,row_data)
@@ -996,7 +1094,8 @@ def process_objects(df: pd.DataFrame, directory: str, level):
         row_data = {
             'id': pid,
             'level': level,
-            'model': my_model,
+            'model': field_model,
+            'field_model': imodel,
             'field_resource_type': resource_type,
         }
         df = add_update_dataframe(df,pid,row_data)
@@ -1050,6 +1149,17 @@ def get_model_paths(start_model: str, models_dict: dict):
 
 
 def get_model_info(model: str,models_dict: dict):
+    """
+    Look up a model's configuration entry from the models dictionary.
+
+    Args:
+        model (str): The model key to look up (e.g., 'Page', 'Compound Object').
+        models_dict (dict): The dictionary containing all model definitions.
+
+    Returns:
+        dict: The model's configuration (model, imodel, resource_type, child) if
+            found, else an empty list.
+    """
     # Check if the starting model exists
     if model not in models_dict:
         logger.warning(f"get_model_info: {model} not in {models_dict}")
@@ -1060,18 +1170,61 @@ def get_model_info(model: str,models_dict: dict):
     return model_info
 
 def get_model(level:int):
-    #if model_paths[0][level-1] == "File":
-        # Return parent model
-    #    return model_paths[0][level-2]
-    #else:
-        # Return model
+    """
+    Resolve the model name for a given depth in the object hierarchy.
+
+    Uses the previously computed model_paths[0] chain (built from the batch's
+    top-level --model argument via get_model_paths()) to determine which model
+    applies at the given level. For shallow hierarchies (path length <= 2),
+    every level maps to the single leaf model; otherwise the model is looked
+    up by position in the path.
+
+    Args:
+        level (int): The current depth in the object hierarchy.
+
+    Returns:
+        str: The model name associated with the given level.
+    """
     model_length = len(model_paths[0])
     if model_length <= 2:
         return model_paths[0][0]
     else:
         return model_paths[0][level-1]
 
+def get_model_details(level):
+    """
+    Given a directory/file level, resolve the model info, imodel, field_model
+    (taxonomy tid), and resource_type for that level.
+
+    Args:
+        level (int): The current depth in the object hierarchy.
+
+    Returns:
+        tuple: (imodel, field_model, resource_type)
+    """
+    my_model = get_model(level)
+    model_info = get_model_info(my_model, models)
+    resource_type = model_info.get('resource_type', 'None')
+    imodel = model_info.get('imodel', 'None')
+    
+    field_model = imodel_tid_map.get(imodel)
+    if field_model is None:
+        logger.warning(f"get_model_details - No taxonomy tid found for imodel '{imodel}'")
+    return imodel, field_model, resource_type
+
 def add_column(df: pd.DataFrame, column_name: str, default=None):
+    """
+    Ensure a column exists in a DataFrame, adding it with a default value if missing.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to check/modify.
+        column_name (str): The name of the column to ensure exists.
+        default: The value to fill the new column with if it doesn't already
+            exist. Defaults to None.
+
+    Returns:
+        pd.DataFrame: The DataFrame, with column_name guaranteed to be present.
+    """
     if column_name not in df.columns:
         df[column_name] = default
     return df
@@ -1080,14 +1233,10 @@ def write_df_to_excel(df: pd.DataFrame, filepath: str, sheet_name: str = "Sheet1
     """
     Write a pandas DataFrame to an Excel (.xlsx) file.
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The DataFrame to write.
-    filepath : str
-        Path to the output .xlsx file.
-    sheet_name : str, optional
-        Name of the Excel sheet (default is 'Sheet1').
+    Args:
+        df (pd.DataFrame): The DataFrame to write.
+        filepath (str): Path to the output .xlsx file.
+        sheet_name (str, optional): Name of the Excel sheet. Defaults to 'Sheet1'.
     """
     try:
         with pd.ExcelWriter(filepath, engine="xlsxwriter") as writer:
@@ -1100,12 +1249,9 @@ def write_df_to_csv(df: pd.DataFrame, filepath: str):
     """
     Write a pandas DataFrame to a CSV file.
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The DataFrame to write.
-    filepath : str
-        Path to the output .csv file.
+    Args:
+        df (pd.DataFrame): The DataFrame to write.
+        filepath (str): Path to the output .csv file.
     """
     try:
         df.to_csv(filepath, index=False)
@@ -1130,7 +1276,7 @@ def main():
     # Model should eventually arive at a "File" model.
     # The 'model' is obtained from the list of models in Islandora 2.
     # All 'model' should be referenced below as a possible type.
-    # The 'resource_type'...
+    # The 'resource_type' is obtained from the list of resource types in Islandora 2.
     # The 'child' points to another model with "File" model being the end.
     globals()['models'] = {
         'Compound Audio': {
@@ -1202,7 +1348,7 @@ def main():
         'Issue PDF': {
             'model': 'Publication Issue PDF',
             'imodel': 'Publication Issue',
-            'resouce_type': 'Text',
+            'resource_type': 'Text',
             'child': 'File',
         },
         'Publication Issue Paged': {
@@ -1278,10 +1424,8 @@ def main():
         },
     }
 
-
     # Valid models.
     # This is the list of valid models that we will work with.
-    #
     globals()['allowed_models'] = [
         "compound audio",
         "compound video",
@@ -1303,15 +1447,6 @@ def main():
         "pdf",
         "binary"
     ]
-
-    ### Other models:
-    #    "collection": "Collection",
-    #    "digital document": "Digital Document",
-    #    "paged content": "Paged Content",
-    #    "publication issue": "Publication Issue",
-    #    "compound object": "Compound Object",
-    #    "newspaper": "Newspaper",
-
 
     # Check the Python Version.
     if sys.version_info.major < REQUIRED_MAJOR or (sys.version_info.major == REQUIRED_MAJOR and sys.version_info.minor < REQUIRED_MINOR):
@@ -1337,6 +1472,7 @@ def main():
     globals()['google_sheet_name']   = cfg['google_sheet_name']
     globals()['log_file']            = cfg['log_file']
     globals()['skip']                = cfg['skip'].split(",")
+    globals()['islandora_base_url']  = cfg['islandora_base_url']
 
     # Override config file variables with command line parameters.
     if args.in_gs_creds is not None:
@@ -1347,6 +1483,8 @@ def main():
         globals()['google_sheet_name'] = args.in_gs_name
     if args.log_file is not None:
         globals()['log_file'] = args.log_file
+    if args.islandora_base_url is not None:
+        globals()['islandora_base_url'] = args.islandora_base_url
 
     # Required Sheet Columns:
     globals()['required_columns'] = ["id","file","level","parent_id",
@@ -1364,9 +1502,7 @@ def main():
     logger.info(f"Google Credentials: {google_credentials}")
     logger.info(f"Google Sheet ID: {google_sheet_id}")
     logger.info(f"Google Sheet Name: {google_sheet_name}")
-
-    # Read Content Models - Proposed for later.
-    # globals()['content_models'] = read_yaml_file('content_models.yml')
+    logger.info(f"Islandora Base URL: {islandora_base_url}")
 
     # Get Batch Model.
     globals()['model'] = args.model
@@ -1397,10 +1533,30 @@ def main():
     logger.info(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     print(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     df = read_google_sheet(google_sheet_id, google_sheet_name, google_credentials)
+    
+    # Fail fast if the sheet could not be read, rather than crashing later
+    # with an unhelpful AttributeError on a None DataFrame.
+    if df is None:
+        logger.error(f"Failed to read Google Sheet: {google_sheet_id},{google_sheet_name}. Exiting.")
+        print(f"Error: Failed to read Google Sheet: {google_sheet_id},{google_sheet_name}. Exiting.")
+        sys.exit(1)
 
     # Ensure all required_columns exist.
     for col in required_columns:
         df = add_column(df,col)
+        
+    # Fetch taxonomy terms once and cache as a name->tid dict.
+    logger.info(f"Fetching Islandora Models taxonomy terms.")
+    print(f"Fetching Islandora Models taxonomy terms.")
+    globals()['imodel_tid_map'] = get_taxonomy_terms_dict(
+        islandora_base_url, 'islandora_models'
+    )
+    logger.info(f"Cached {len(imodel_tid_map)} taxonomy terms.")
+    
+    # Check if the taxonomy terms were successfully fetched.
+    if not imodel_tid_map:
+        logger.error("Failed to fetch taxonomy terms - field_model values will be empty for this run.")
+        print("Warning: Failed to fetch taxonomy terms. Continuing, but field_model will be blank.")
 
     # Process the contents.
     globals()['top'] = args.directory

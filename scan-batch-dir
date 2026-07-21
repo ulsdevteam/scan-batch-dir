@@ -37,18 +37,6 @@ def get_username() -> str:
     """
     return pwd.getpwuid(os.getuid())[0]
 
-def create_temp_dir_at_path(path: str) -> str:
-    """Creates a temporary directory at the specified path.
-
-    Args:
-        path: The path where the temporary directory should be created.
-
-    Returns:
-        The path to the created temporary directory.
-    """
-    temp_dir = tempfile.mkdtemp(dir=path)
-    return temp_dir
-
 def read_yaml_file(path: str) -> dict:
     """
     Reads a YAML file and returns its content as a dictionary.
@@ -1020,6 +1008,7 @@ def process_file(df: pd.DataFrame, file_path: str, level):
             # Override Row Data.
             # For transcription files just update the transcript column.
             row_data = {
+                'id': pid,
                 'transcript': file_path
             }
 
@@ -1521,6 +1510,13 @@ def main():
     logger.info(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     print(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     df = read_google_sheet(google_sheet_id, google_sheet_name, google_credentials)
+    
+    # Fail fast if the sheet could not be read, rather than crashing later
+    # with an unhelpful AttributeError on a None DataFrame.
+    if df is None:
+        logger.error(f"Failed to read Google Sheet: {google_sheet_id},{google_sheet_name}. Exiting.")
+        print(f"Error: Failed to read Google Sheet: {google_sheet_id},{google_sheet_name}. Exiting.")
+        sys.exit(1)
 
     # Ensure all required_columns exist.
     for col in required_columns:

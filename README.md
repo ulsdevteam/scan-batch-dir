@@ -46,8 +46,8 @@ The following requirements are needed to run this script.
   |--- |--- |
   |'id'                    |The PID of the object. This column must exist.|
   |'file'                  |Leave this empty but the column must exist. This field will be updated by the script with the full path to the file.|
-  |'model'                 |This column will be added. This is the Islandora Model.|
-  |'field_model'           |This column will be added. This is the Islanodra Model Taxonomy ID.|
+  |'model'                 |This column will be added. This is the Islandora Model Taxonomy ID.|
+  |'field_model'           |This column will be added. This is the Islanodra Model.|
   |'field_weight'          |This column will be added. This is the order of the objects in the sheet if it can be determined.|
   |'field_resource_type'   |This column will be added. This is the Resource Type of the object in the sheet.|
   |'parent_id'             |This column will be added. This is the parent ID of the object in the sheet.|

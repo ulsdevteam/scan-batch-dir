@@ -149,9 +149,6 @@ def pad_rows(data: list) -> tuple:
 
     return headers, rows
 
-
-        
-
 def read_google_sheet(spreadsheet_id: str, sheet_name="Sheet1", credentials_file="configuration.json") -> pd.DataFrame:
     """
     Reads data from a Google Sheet into a pandas DataFrame.
@@ -305,13 +302,13 @@ def add_row_to_dataframe(df, row_data, key_column):
     """
     Add a new row to a pandas DataFrame, ensuring the key column value is unique.
 
-    Parameters:
-    df (pandas.DataFrame): The input DataFrame
-    row_data (dict): Dictionary containing the new row data with column names as keys
-    key_column (str): The column name to check for uniqueness
+    Args:
+        df (pandas.DataFrame): The input DataFrame
+        row_data (dict): Dictionary containing the new row data with column names as keys
+        key_column (str): The column name to check for uniqueness
 
     Returns:
-    pandas.DataFrame: DataFrame with the new row appended if key is unique, original DataFrame otherwise
+        pandas.DataFrame: DataFrame with the new row appended if key is unique, original DataFrame otherwise
     """
     try:
         # Verify input is a DataFrame
@@ -710,7 +707,7 @@ def get_value_from_df(df: pd.DataFrame, match_column: str, match_value, return_c
     Given a pandas DataFrame, find the row where match_column == match_value
     and return the first value from return_column.
 
-    Parameters:
+    Args:
         df (pd.DataFrame): The DataFrame to search.
         match_column (str): Column name to match on.
         match_value: Value to look for in match_column.
@@ -742,7 +739,7 @@ def get_taxonomy_terms(base_url, vocabulary, auth_token=None):
     """
     Fetch taxonomy term ID (tid) from Drupal JSON:API given term name.
 
-    Parameters:
+    Args:
         base_url (str): Base URL of the Drupal site (e.g., 'https://example.com').
         vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
         auth_token (str): Optional Bearer token for authentication.
@@ -788,7 +785,7 @@ def get_taxonomy_term_tid(base_url, vocabulary, term_name, auth_token=None):
     """
     Fetch taxonomy term ID (tid) from Drupal JSON:API given term name.
 
-    Parameters:
+    Args:
         base_url (str): Base URL of the Drupal site (e.g., 'https://example.com').
         vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
         term_name (str): Name of the taxonomy term to search.
@@ -814,7 +811,7 @@ def get_taxonomy_term_name(base_url, vocabulary, tid, auth_token=None):
     """
     Fetch taxonomy term name from Drupal JSON:API given term ID (tid).
 
-    Parameters:
+    Args:
         base_url (str): Base URL of the Drupal site (e.g., 'https://example.com').
         vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
         tid (str): Taxonomy term ID to search.
@@ -919,7 +916,7 @@ def process_file(df: pd.DataFrame, file_path: str, level):
     """
     Process the found file.
 
-    Parameters:
+    Args:
         df: The Pandas dataframe.
         file_path (str): The path to the file.
         level: The level of the path in relation to the starting directory.
@@ -1152,6 +1149,17 @@ def get_model_paths(start_model: str, models_dict: dict):
 
 
 def get_model_info(model: str,models_dict: dict):
+    """
+    Look up a model's configuration entry from the models dictionary.
+
+    Args:
+        model (str): The model key to look up (e.g., 'Page', 'Compound Object').
+        models_dict (dict): The dictionary containing all model definitions.
+
+    Returns:
+        dict: The model's configuration (model, imodel, resource_type, child) if
+            found, else an empty list.
+    """
     # Check if the starting model exists
     if model not in models_dict:
         logger.warning(f"get_model_info: {model} not in {models_dict}")
@@ -1162,11 +1170,21 @@ def get_model_info(model: str,models_dict: dict):
     return model_info
 
 def get_model(level:int):
-    #if model_paths[0][level-1] == "File":
-        # Return parent model
-    #    return model_paths[0][level-2]
-    #else:
-        # Return model
+    """
+    Resolve the model name for a given depth in the object hierarchy.
+
+    Uses the previously computed model_paths[0] chain (built from the batch's
+    top-level --model argument via get_model_paths()) to determine which model
+    applies at the given level. For shallow hierarchies (path length <= 2),
+    every level maps to the single leaf model; otherwise the model is looked
+    up by position in the path.
+
+    Args:
+        level (int): The current depth in the object hierarchy.
+
+    Returns:
+        str: The model name associated with the given level.
+    """
     model_length = len(model_paths[0])
     if model_length <= 2:
         return model_paths[0][0]
@@ -1195,6 +1213,18 @@ def get_model_details(level):
     return imodel, field_model, resource_type
 
 def add_column(df: pd.DataFrame, column_name: str, default=None):
+    """
+    Ensure a column exists in a DataFrame, adding it with a default value if missing.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to check/modify.
+        column_name (str): The name of the column to ensure exists.
+        default: The value to fill the new column with if it doesn't already
+            exist. Defaults to None.
+
+    Returns:
+        pd.DataFrame: The DataFrame, with column_name guaranteed to be present.
+    """
     if column_name not in df.columns:
         df[column_name] = default
     return df
@@ -1203,14 +1233,10 @@ def write_df_to_excel(df: pd.DataFrame, filepath: str, sheet_name: str = "Sheet1
     """
     Write a pandas DataFrame to an Excel (.xlsx) file.
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The DataFrame to write.
-    filepath : str
-        Path to the output .xlsx file.
-    sheet_name : str, optional
-        Name of the Excel sheet (default is 'Sheet1').
+    Args:
+        df (pd.DataFrame): The DataFrame to write.
+        filepath (str): Path to the output .xlsx file.
+        sheet_name (str, optional): Name of the Excel sheet. Defaults to 'Sheet1'.
     """
     try:
         with pd.ExcelWriter(filepath, engine="xlsxwriter") as writer:
@@ -1223,12 +1249,9 @@ def write_df_to_csv(df: pd.DataFrame, filepath: str):
     """
     Write a pandas DataFrame to a CSV file.
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The DataFrame to write.
-    filepath : str
-        Path to the output .csv file.
+    Args:
+        df (pd.DataFrame): The DataFrame to write.
+        filepath (str): Path to the output .csv file.
     """
     try:
         df.to_csv(filepath, index=False)

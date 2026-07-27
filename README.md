@@ -44,7 +44,7 @@ The following requirements are needed to run this script.
 
   |Required Columns        | Description |
   |--- |--- |
-  |'id'                    |The PID of the object. This column must exist.|
+  |id_column (default:'id') |The PID of the object. This column must exist. The column name is configurable via the id_column setting in the config file or the --id-column script parameter; if not specified, defaults to 'id'.|
   |'file'                  |Leave this empty but the column must exist. This field will be updated by the script with the full path to the file.|
   |'model'                 |This column will be added. This is the Islandora Model Taxonomy ID.|
   |'field_model'           |This column will be added. This is the Islanodra Model.|
@@ -75,6 +75,7 @@ The following requirements are needed to run this script.
   |\--in-google-sheet-id    |The ID number of the Google Sheet.|
   |\--in-google-sheet-name  |The Name of the Tab in the Google Sheet (E.g.: Sheet1)|
   |\--in-google-creds-file  |The full or relative path to the Google Credentials File.|
+  |\--id-column             | The name of the column to use as the unique object identifier. Defaults to 'id' if not specified in the config file or here.|
 
 ## Google Credentials File:
 
@@ -235,7 +236,7 @@ Eg. An audio file with no transcript or thumbnail:
 
 The file layout below also follows DRL scanning practices where files
 are scanned and placed at the top-level batch folder. Each file has its
-own Object ID that matches the 'id' column in the spreadsheet.
+own Object ID that matches the id_column in the spreadsheet.
 
 - Top Level Batch Folder/Object ID.tif
 

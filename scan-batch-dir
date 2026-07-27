@@ -531,6 +531,7 @@ def parse_arguments():
     parser.add_argument('--in-google-sheet-name', dest="in_gs_name", help='Google Sheet Tab Name.')
     parser.add_argument('--in-google-creds-file', dest="in_gs_creds", help='Google Credentials json file.')
     parser.add_argument('--base-url', dest="islandora_base_url", help='Base URL of the Islandora instance.')
+    parser.add_argument('--id-column', dest="id_column", help="Column name to use as the unique object identifier (default: 'id').")
 
     # Parse Arguments
     args = parser.parse_args()
@@ -670,20 +671,20 @@ def get_file_info(file_path: str):
 
 def add_update_dataframe(df: pd.DataFrame, pid: str, row_data):
     """
-    Depending upon if the pid exists in the 'id' column of the dataframe
+    Depending upon if the pid exists in the identifier column of the dataframe
     either add or update the row to the dataframe.
 
     Args:
         df (DataFrame)  The Pandas Dataframe to work with.
-        pid (str)       The PID to find in the DataFrame 'id' column.
+        pid (str)       The PID to find in the DataFrame identifier column.
         row_data (dict) The row data to add/update the row with.
 
     Returns:
         df (DataFrame)  The updated DataFrame.
     """
-    if (value_exists_in_column(df,'id',pid)):
+    if (value_exists_in_column(df,id_column,pid)):
         logger.info(f"Updating Dataframe: {pid}")
-        updated_df,success,msg = update_dataframe(df, 'id', pid, row_data)
+        updated_df,success,msg = update_dataframe(df, id_column, pid, row_data)
         if not (success):
             logger.warning(f"Update DataFrame: Failed for PID: {pid} - {msg}")
             print(f"Update DataFrame: failed for PID: {pid}")
@@ -693,7 +694,7 @@ def add_update_dataframe(df: pd.DataFrame, pid: str, row_data):
             return updated_df
     else:
         logger.info(f"Adding to Dataframe: {pid}")
-        updated_df,success,msg = add_row_to_dataframe(df,row_data,key_column='id')
+        updated_df,success,msg = add_row_to_dataframe(df,row_data,key_column=id_column)
         if not (success):
             logger.warning(f"Adding to DataFrame: Failed for PID: {pid} - {msg}")
             print(f"Added to DataFrame: Failed for PID: {pid}")
@@ -963,7 +964,7 @@ def process_file(df: pd.DataFrame, file_path: str, level):
 
         # Default row_data
         row_data = {
-            'id': pid,
+            id_column: pid,
             'file': file_path,
             'parent_id': parent_folder,
             'field_weight': file_weight,
@@ -983,7 +984,7 @@ def process_file(df: pd.DataFrame, file_path: str, level):
             pid,file_path = process_tiff(file_path,level)
 
             # Override Row Data.
-            row_data['id'] = pid
+            row_data[id_column] = pid
             row_data['file'] = file_path
 
         # Process any .jp2 files.
@@ -1005,7 +1006,7 @@ def process_file(df: pd.DataFrame, file_path: str, level):
             # Override Row Data.
             # For transcription files just update the transcript column.
             row_data = {
-                'id': pid,
+                id_column: pid,
                 'transcript': file_path
             }
 
@@ -1081,7 +1082,7 @@ def process_objects(df: pd.DataFrame, directory: str, level):
     if level > 1:
         # For this directory.
         row_data = {
-            'id': pid,
+            id_column: pid,
             'level': level,
             'parent_id': parent_folder,
             'model': field_model,
@@ -1092,7 +1093,7 @@ def process_objects(df: pd.DataFrame, directory: str, level):
 
     if level == 1:
         row_data = {
-            'id': pid,
+            id_column: pid,
             'level': level,
             'model': field_model,
             'field_model': imodel,
@@ -1473,6 +1474,7 @@ def main():
     globals()['log_file']            = cfg['log_file']
     globals()['skip']                = cfg['skip'].split(",")
     globals()['islandora_base_url']  = cfg['islandora_base_url']
+    globals()['id_column']           = cfg.get('id_column', 'id')
 
     # Override config file variables with command line parameters.
     if args.in_gs_creds is not None:
@@ -1485,9 +1487,11 @@ def main():
         globals()['log_file'] = args.log_file
     if args.islandora_base_url is not None:
         globals()['islandora_base_url'] = args.islandora_base_url
+    if args.id_column is not None:
+        globals()['id_column'] = args.id_column
 
     # Required Sheet Columns:
-    globals()['required_columns'] = ["id","file","level","parent_id",
+    globals()['required_columns'] = [id_column,"file","level","parent_id",
         "field_weight","field_model","model","field_resource_type","transcript"]
 
     # Create the Log file.

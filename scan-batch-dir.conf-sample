@@ -21,3 +21,7 @@ skip: ignore,meta,.jp2,.metadata,.opex,.fits,target.tif,metadata.csv,metadata.xl
 #--------------------------------------------------------------------
 # Islandora Base URL for API lookups.
 islandora_base_url: https://your.islandora.server
+
+#--------------------------------------------------------------------
+# id_column - the column name containing object identifiers.
+id_column: id

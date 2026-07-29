@@ -119,6 +119,117 @@ def connect_to_google_sheet(credentials_file: str):
     except Exception as e:
         raise Exception(f"Failed to create Google Sheets service: {str(e)}")
     
+def get_service_account_email(credentials_file: str) -> str:
+    """
+    Reads the 'client_email' field out of a Google service account
+    credentials JSON file.
+
+    Args:
+        credentials_file (str): Path to the Google service account credentials file.
+
+    Returns:
+        str or None: The service account email if found, else None.
+    """
+    try:
+        with open(credentials_file, "r") as f:
+            data = json.load(f)
+        return data.get("client_email")
+    except Exception as e:
+        logger.error(f"get_service_account_email - Failed to read credentials file: {str(e)}")
+        return None
+
+
+def check_sheet_protections(spreadsheet_id: str, credentials_file: str) -> tuple:
+    """
+    Checks all protected ranges/sheets in a Google Spreadsheet and determines
+    whether the service account associated with credentials_file is allowed
+    to edit within each protected range.
+
+    Args:
+        spreadsheet_id (str): The ID of the Google Sheet.
+        credentials_file (str): Path to the Google service account credentials file.
+
+    Returns:
+        tuple: (can_edit_all, blocking_protections, message)
+            can_edit_all (bool): True if no protections block the service account,
+                False if one or more protections would block writes.
+            blocking_protections (list of dict): Details of each protection that
+                the service account is NOT permitted to bypass. Each dict has
+                keys: sheet, description, range, warning_only.
+            message (str): Human-readable summary.
+    """
+    try:
+        sa_email = get_service_account_email(credentials_file)
+        if not sa_email:
+            msg = "check_sheet_protections - Could not determine service account email from credentials file."
+            logger.error(msg)
+            return False, [], msg
+
+        service = connect_to_google_sheet(credentials_file)
+
+        result = service.spreadsheets().get(
+            spreadsheetId=spreadsheet_id,
+            fields="sheets(properties(sheetId,title),protectedRanges)"
+        ).execute()
+
+        blocking_protections = []
+
+        for sheet in result.get('sheets', []):
+            title = sheet['properties']['title']
+            for pr in sheet.get('protectedRanges', []):
+                warning_only = pr.get('warningOnly', False)
+
+                # Warning-only protections do not block API writes.
+                if warning_only:
+                    continue
+
+                editors = pr.get('editors', {})
+                editor_users = editors.get('users', [])
+                domain_can_edit = editors.get('domainUsersCanEdit', False)
+
+                # If the service account is explicitly listed, it can edit.
+                if sa_email in editor_users:
+                    continue
+
+                # If domain-wide editing is allowed, and the service account
+                # belongs to that domain, it can edit. We can't reliably
+                # verify domain membership here, so we flag it as a caveat
+                # rather than assuming it's safe.
+                if domain_can_edit:
+                    logger.warning(
+                        f"check_sheet_protections - Sheet '{title}' protection allows "
+                        f"domain editors; unable to verify if '{sa_email}' is in-domain."
+                    )
+
+                # Otherwise, this protection blocks the service account.
+                blocking_protections.append({
+                    'sheet': title,
+                    'description': pr.get('description', ''),
+                    'range': pr.get('range', {}),
+                    'warning_only': warning_only,
+                })
+
+        if blocking_protections:
+            msg = (
+                f"check_sheet_protections - Service account '{sa_email}' is blocked by "
+                f"{len(blocking_protections)} protected range(s): "
+                + ", ".join(
+                    f"[{p['sheet']}: {p['description'] or 'unnamed'}]"
+                    for p in blocking_protections
+                )
+            )
+            logger.error(msg)
+            return False, blocking_protections, msg
+        else:
+            msg = f"check_sheet_protections - Service account '{sa_email}' can edit all ranges checked."
+            logger.info(msg)
+            return True, [], msg
+
+    except Exception as e:
+        msg = f"check_sheet_protections - An error occurred: {str(e)}"
+        logger.error(msg)
+        return False, [], msg
+    
 def pad_rows(data: list) -> tuple:
     """
     Pads each row in the data to ensure all rows have the same length.
@@ -1534,6 +1645,17 @@ def main():
     print(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     df = read_google_sheet(google_sheet_id, google_sheet_name, google_credentials)
     
+    # Check that the service account can actually write to this sheet before
+    # doing all the work of scanning the directory.
+    can_edit, blocking, msg = check_sheet_protections(google_sheet_id, google_credentials)
+    if not can_edit:
+        logger.error(f"Aborting: {msg}")
+        print(f"Error: The service account cannot edit this sheet due to protected ranges:")
+        for p in blocking:
+            print(f"  - Sheet '{p['sheet']}': {p['description'] or '(no description)'} — range: {p['range']}")
+        print("Contact the spreadsheet owner to remove protection or add the service account as an editor.")
+        sys.exit(1)
+    
     # Fail fast if the sheet could not be read, rather than crashing later
     # with an unhelpful AttributeError on a None DataFrame.
     if df is None:
@@ -1544,7 +1666,13 @@ def main():
     # Ensure all required_columns exist.
     for col in required_columns:
         df = add_column(df,col)
-        
+
+    dupe_cols = df.columns[df.columns.duplicated()].tolist()
+    if dupe_cols:
+        logger.error(f"Duplicate columns detected in sheet: {dupe_cols}")
+        print(f"Duplicate columns detected in sheet: {dupe_cols}")
+        sys.exit(1)
+
     # Fetch taxonomy terms once and cache as a name->tid dict.
     logger.info(f"Fetching Islandora Models taxonomy terms.")
     print(f"Fetching Islandora Models taxonomy terms.")

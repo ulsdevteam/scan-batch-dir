@@ -556,7 +556,13 @@ def process_tiff(file_path:str, level):
     # Create the JP2 derivative if it does not already exist.
     # if the JP2 does not exist:
     jp2_path = f"{dir}/{pid}.jp2"
-    out_pid = f"{pid}"
+    
+    # Only prefix with the parent when one actually exists — top-level
+    # (level == 1) files have no meaningful parent, matching process_file().
+    if level == 1 or not parent:
+        out_pid = f"{pid}"
+    else:
+        out_pid = f"{parent}-{pid}"
 
     logger.info(f"Tiff: Creating JP2: {jp2_path}")
     if not os.path.exists(jp2_path):
@@ -958,6 +964,8 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         pid = f"{file_name}"
         if level == 1:
             parent_folder = ''
+        elif parent_folder:
+            pid = f"{parent_folder}-{file_name}"
 
         # Default row_data
         row_data = {

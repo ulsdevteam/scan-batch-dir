@@ -10,8 +10,6 @@ import subprocess
 import shutil
 import logging
 import openpyxl
-import csv
-import io
 import re
 import requests
 import pandas as pd
@@ -24,8 +22,16 @@ pd.set_option('future.no_silent_downcasting', True)
 REQUIRED_MAJOR = 3
 REQUIRED_MINOR = 12
 
+# Columns written to the Google Sheet as numbers rather than text. Values read
+# back from the Sheet arrive as strings, so these are converted to integers on
+# write; otherwise numeric data validation flags them as invalid.
+NUMERIC_COLUMNS = ["level", "field_weight", "model"]
+
 # Setup the log file format.
-log_formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
+log_formatter = logging.Formatter(
+    fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',
+    datefmt="%Y%m%d %H:%M:%S"
+)
 
 
 def get_username() -> str:
@@ -62,13 +68,19 @@ def read_yaml_file(path: str) -> dict:
         print(f"File not found: {path}. Please check the file path and try again.")
         raise
     except yaml.YAMLError:
-        print(f"Error parsing YAML file: {path}. Please ensure the file is properly formatted.",file=sys.stderr)
+        print(
+            f"Error parsing YAML file: {path}. Please ensure the file is properly formatted.",
+            file=sys.stderr
+        )
         raise
     except ValueError:
-        print(f"Invalid content in YAML file: {path}.",file=sys.stderr)
+        print(f"Invalid content in YAML file: {path}.", file=sys.stderr)
         raise
     except Exception as e:
-        print(f"An unexpected error occurred while reading the YAML file: {str(e)}",file=sys.stderr)
+        print(
+            f"An unexpected error occurred while reading the YAML file: {str(e)}",
+            file=sys.stderr
+        )
         raise e
 
 def setup_logger(name: str, log_file: str, level=logging.DEBUG) -> logging.Logger:
@@ -118,7 +130,7 @@ def connect_to_google_sheet(credentials_file: str):
 
     except Exception as e:
         raise Exception(f"Failed to create Google Sheets service: {str(e)}")
-    
+
 def get_service_account_email(credentials_file: str) -> str:
     """
     Reads the 'client_email' field out of a Google service account
@@ -161,7 +173,10 @@ def check_sheet_protections(spreadsheet_id: str, credentials_file: str) -> tuple
     try:
         sa_email = get_service_account_email(credentials_file)
         if not sa_email:
-            msg = "check_sheet_protections - Could not determine service account email from credentials file."
+            msg = (
+                "check_sheet_protections - Could not determine service account email "
+                "from credentials file."
+            )
             logger.error(msg)
             return False, [], msg
 
@@ -221,7 +236,10 @@ def check_sheet_protections(spreadsheet_id: str, credentials_file: str) -> tuple
             logger.error(msg)
             return False, blocking_protections, msg
         else:
-            msg = f"check_sheet_protections - Service account '{sa_email}' can edit all ranges checked."
+            msg = (
+                f"check_sheet_protections - Service account '{sa_email}' "
+                f"can edit all ranges checked."
+            )
             logger.info(msg)
             return True, [], msg
 
@@ -229,7 +247,7 @@ def check_sheet_protections(spreadsheet_id: str, credentials_file: str) -> tuple
         msg = f"check_sheet_protections - An error occurred: {str(e)}"
         logger.error(msg)
         return False, [], msg
-    
+
 def pad_rows(data: list) -> tuple:
     """
     Pads each row in the data to ensure all rows have the same length.
@@ -260,7 +278,8 @@ def pad_rows(data: list) -> tuple:
 
     return headers, rows
 
-def read_google_sheet(spreadsheet_id: str, sheet_name="Sheet1", credentials_file="configuration.json") -> pd.DataFrame:
+def read_google_sheet(spreadsheet_id: str, sheet_name="Sheet1",
+                      credentials_file="configuration.json") -> pd.DataFrame:
     """
     Reads data from a Google Sheet into a pandas DataFrame.
 
@@ -276,7 +295,7 @@ def read_google_sheet(spreadsheet_id: str, sheet_name="Sheet1", credentials_file
         # Build the service
         logger.info(f"Connecting to Google Sheet using credentials file: {credentials_file}")
         logger.info(f"SheetID: {spreadsheet_id}, Sheet Name: {sheet_name}")
-        service = connect_to_google_sheet(credentials_file);
+        service = connect_to_google_sheet(credentials_file)
 
         # Call the Sheets API
         sheet = service.spreadsheets().values().get(
@@ -293,31 +312,68 @@ def read_google_sheet(spreadsheet_id: str, sheet_name="Sheet1", credentials_file
 
             # Return empty DataFrame
             return pd.DataFrame()
-        
+
         # Pad the rows to ensure all rows have the same length
-        headers,rows = pad_rows(data)
+        headers, rows = pad_rows(data)
 
         # Create DataFrame
         df = pd.DataFrame(rows, columns=headers)
-        
+
         logger.info(f"read_google_sheet - Read of Google Sheet Successful.")
         print(f"Read of Google Sheet Successful.")
-        
+
         return df
 
     except Exception as e:
         print(f"Error accessing Google Sheet: {str(e)}")
         return None
 
-def update_google_sheet(df: pd.DataFrame, spreadsheet_id: str, sheet_name: str, credentials_file: str) -> tuple:
+def col_letter(idx: int) -> str:
     """
-    Updates a Google Sheet with data from a pandas DataFrame.
+    Converts a 0-based column index to an A1-notation column letter.
+
+    Args:
+        idx (int): 0-based column index (0 -> A, 26 -> AA).
+
+    Returns:
+        str: The column letter(s).
+    """
+    s = ""
+    idx += 1
+    while idx:
+        idx, rem = divmod(idx - 1, 26)
+        s = chr(65 + rem) + s
+    return s
+
+def _clean_cell(v):
+    """Converts None/NaN to an empty string so the API request body is valid JSON."""
+    return '' if v is None or (isinstance(v, float) and v != v) else v
+
+def _to_int_if_numeric(v):
+    """Converts strings such as "3" back to integers so Sheets stores a number, not text."""
+    if isinstance(v, str) and re.fullmatch(r'-?\d+', v.strip()):
+        return int(v.strip())
+    return v
+
+
+def update_google_sheet(
+    df: pd.DataFrame,
+    spreadsheet_id: str,
+    sheet_name: str,
+    credentials_file: str,
+    managed_columns=None
+) -> tuple:
+    """
+    Updates ONLY the script-managed columns of a Google Sheet from a pandas DataFrame.
+    All other columns (e.g. field_domain_access with its dropdown chips) are left
+    untouched.
 
     Args:
         df (pandas.DataFrame): The DataFrame containing updated data.
         spreadsheet_id (str): The ID of the Google Sheet.
         sheet_name (str): The name of the sheet to update.
         credentials_file (str): Path to the Google service account credentials file.
+        managed_columns (list): Columns to write. Defaults to required_columns.
 
     Returns:
         tuple: Success status and message.
@@ -331,28 +387,34 @@ def update_google_sheet(df: pd.DataFrame, spreadsheet_id: str, sheet_name: str, 
             return False, "DataFrame is empty"
 
         # Build the service
-        service = connect_to_google_sheet(credentials_file);
+        service = connect_to_google_sheet(credentials_file)
 
-        # Call the Sheets API
-        sheet = service.spreadsheets()
+        managed = managed_columns or required_columns
 
-        # Convert DataFrame to list of lists (including headers)
-        values = [df.columns.tolist()] + df.values.tolist()
+        # Quote the sheet name so spaces/apostrophes don't break the A1 range.
+        quoted_name = "'" + sheet_name.replace("'", "''") + "'"
 
-        # Prepare the body for the API request
-        body = {
-            'values': values
-        }
+        # Build one column-oriented range per managed column.
+        data = []
+        for col in managed:
+            if col not in df.columns:
+                continue
+            vals = [_clean_cell(v) for v in df[col].tolist()]
+            if col in NUMERIC_COLUMNS:
+                vals = [_to_int_if_numeric(v) for v in vals]
+            data.append({
+                'range': f"{quoted_name}!{col_letter(df.columns.get_loc(col))}1",
+                'majorDimension': 'COLUMNS',
+                'values': [[col] + vals],
+            })
 
-        # Update the sheet with DataFrame contents
-        result = sheet.values().update(
+        # Update only those columns in a single API call.
+        result = service.spreadsheets().values().batchUpdate(
             spreadsheetId=spreadsheet_id,
-            range=f'{sheet_name}!A1',
-            valueInputOption='RAW',
-            body=body
+            body={'valueInputOption': 'RAW', 'data': data}
         ).execute()
 
-        updated_cells = result.get('updatedCells', 0)
+        updated_cells = result.get('totalUpdatedCells', 0)
         return True, f"Successfully updated {updated_cells} cells"
 
     except Exception as e:
@@ -390,14 +452,20 @@ def update_dataframe(df: pd.DataFrame, match_column: str, match_value: str, upda
         mask = df_copy[match_column] == match_value
 
         if not mask.any():
-            return df, False, f"update_dataframe - No rows found matching '{match_value}' in '{match_column}'"
+            return df, False, (
+                f"update_dataframe - No rows found matching '{match_value}' in '{match_column}'"
+            )
 
         for column, value in update_dict.items():
             if column in df_copy.columns:
                 df_copy.loc[mask, column] = value
             else:
-                logger.warning(f"update_dataframe: Column:{column} does not exist - unable to update with value: {value}.")
-                print(f"update_dataframe: Column:{column} does not exist - unable to update with value: {value}.")
+                logger.warning(
+                    f"update_dataframe: Column:{column} does not exist - unable to update with value: {value}."
+                )
+                print(
+                    f"update_dataframe: Column:{column} does not exist - unable to update with value: {value}."
+                )
 
         # Clean Dataframe of NaN values.
         df = df_copy.fillna('')
@@ -533,7 +601,7 @@ def convert_tiff_to_jp2(tif_file_path, jp2_file_path):
 
     try:
         result = subprocess.run(args, capture_output=True, text=True)
-        if (result.returncode == 0):
+        if result.returncode == 0:
             logger.info(f"Successfully converted TIFF to JP2: {tif_file_path}")
     except Exception as e:
         logger.error(f"Failed to convert TIFF to JP2: {str(e)}")
@@ -575,7 +643,7 @@ def is_valid_image(image_path):
         logger.error(f"An unexpected error occurred: {e}")
         return False
 
-def is_valid_filesize(x_bytes,file_path):
+def is_valid_filesize(x_bytes, file_path):
     """
     Checks if a file's size is larger than a specified number of bytes.
 
@@ -635,7 +703,7 @@ def parse_arguments():
     parser.add_argument('--config-file', dest="config_file", required=True, help='Path to the YAML configuration file.')
     parser.add_argument('--log-file', dest="log_file", required=True, help='Path to the log file.')
     parser.add_argument('--directory', dest="directory", required=True, help='Path to the directory to scan.')
-    parser.add_argument('--model', dest="model", required=True, help='The Islandora Model associated with the batch.', choices=['Book', 'Image','Audio','Video','Page','Issue PDF','Issue Paged','Compound Book','Compound Audio','Compound Image','Compound Video'])
+    parser.add_argument('--model', dest="model", required=True, help='The Islandora Model associated with the batch.', choices=['Book', 'Image', 'Audio', 'Video', 'Page', 'Issue PDF', 'Issue Paged', 'Compound Book', 'Compound Audio', 'Compound Image', 'Compound Video'])
 
     # Optional arguments
     parser.add_argument('--in-google-sheet-id', dest="in_gs_id", help='Google Sheet ID related to the directory.')
@@ -649,7 +717,7 @@ def parse_arguments():
 
     return args
 
-def process_tiff(file_path:str, level):
+def process_tiff(file_path: str, level):
     """
     Processes a TIFF (.tif) file and converts it to a JP2 (.jp2) file.
 
@@ -662,12 +730,12 @@ def process_tiff(file_path:str, level):
 
     """
     # Process a .tif file.
-    pid,parent,file,dir,ext = get_file_info(file_path)
+    pid, parent, file, dir, ext = get_file_info(file_path)
 
     # Create the JP2 derivative if it does not already exist.
     # if the JP2 does not exist:
     jp2_path = f"{dir}/{pid}.jp2"
-    
+
     # Only prefix with the parent when one actually exists — top-level
     # (level == 1) files have no meaningful parent, matching process_file().
     if level == 1 or not parent:
@@ -684,9 +752,9 @@ def process_tiff(file_path:str, level):
         logger.warning(f"JP2 Already Exists: {jp2_path}")
         print(f"  JP2 Already Exists: {jp2_path}")
 
-    return out_pid,jp2_path
+    return out_pid, jp2_path
 
-def process_mp3(file_path:str):
+def process_mp3(file_path: str):
     """
     Determines the pid and resulting mp3_path of passed in file_path.
 
@@ -698,13 +766,13 @@ def process_mp3(file_path:str):
         mp3_path (str) The Path to the MP3 file.
     """
     # Process a .mp3 file.
-    pid,parent,file,dir,ext = get_file_info(file_path)
+    pid, parent, file, dir, ext = get_file_info(file_path)
     out_pid = f"{parent}-{pid}"
     mp3_path = f"{dir}/{pid}{ext}"
 
-    return out_pid,mp3_path
+    return out_pid, mp3_path
 
-def process_transcript(file_path:str):
+def process_transcript(file_path: str):
     """
     Determines the pid and path to the transcript file.
 
@@ -716,13 +784,13 @@ def process_transcript(file_path:str):
         vtt_path (str) The Path to the Transcript file.
     """
     # Process a .vtt or .srt file.
-    pid,parent,file,dir,ext = get_file_info(file_path)
+    pid, parent, file, dir, ext = get_file_info(file_path)
     out_pid = f"{parent}-{pid}"
     vtt_path = f"{dir}/{pid}{ext}"
 
-    return out_pid,vtt_path
+    return out_pid, vtt_path
 
-def process_thumbnail(file_path:str):
+def process_thumbnail(file_path: str):
     """
     Determine the pid and path to the thumbnail file.
 
@@ -734,13 +802,13 @@ def process_thumbnail(file_path:str):
         tn_path  (str) the Path to the thumbnail file.
     """
     # Process a thumbnail (.jpg/.png).
-    pid,parent,file,dir,ext = get_file_info(file_path)
+    pid, parent, file, dir, ext = get_file_info(file_path)
     out_pid = f"{parent}-{pid}"
     tn_path = f"{dir}/{pid}{ext}"
 
-    return out_pid,tn_path
+    return out_pid, tn_path
 
-def process_unknown(file_path:str):
+def process_unknown(file_path: str):
     """
     Determine the pid and path to the unknown file.
 
@@ -752,11 +820,11 @@ def process_unknown(file_path:str):
         unknown_path (str) The path to the unknown file.
     """
     # Process a unknown file.
-    pid,parent,file,dir,ext = get_file_info(file_path)
+    pid, parent, file, dir, ext = get_file_info(file_path)
     out_pid = f"{parent}-{pid}"
     unknown_path = f"{dir}/{pid}{ext}"
 
-    return out_pid,unknown_path
+    return out_pid, unknown_path
 
 
 def get_file_info(file_path: str):
@@ -773,14 +841,14 @@ def get_file_info(file_path: str):
         dir     (str) The directory that the file is located in.
         ext     (str) The file extension of the file.
     """
-    dir,ext = os.path.splitext(file_path)   # Split the file_path into directory and extension.
+    dir, ext = os.path.splitext(file_path)   # Split the file_path into directory and extension.
     file_name = os.path.basename(dir)       # Get the file_name of the object which will usually be the pid.
     pid = file_name                         # Assign pid to the last piece of the directory.
     parent = os.path.basename(os.path.dirname(file_path))
     dir = os.path.dirname(file_path)
     file = f"{pid}{ext}"
 
-    return(pid,parent,file,dir,ext)
+    return(pid, parent, file, dir, ext)
 
 
 def add_update_dataframe(df: pd.DataFrame, pid: str, row_data):
@@ -796,10 +864,10 @@ def add_update_dataframe(df: pd.DataFrame, pid: str, row_data):
     Returns:
         df (DataFrame)  The updated DataFrame.
     """
-    if (value_exists_in_column(df,id_column,pid)):
+    if value_exists_in_column(df, id_column, pid):
         logger.info(f"Updating Dataframe: {pid}")
-        updated_df,success,msg = update_dataframe(df, id_column, pid, row_data)
-        if not (success):
+        updated_df, success, msg = update_dataframe(df, id_column, pid, row_data)
+        if not success:
             logger.warning(f"Update DataFrame: Failed for PID: {pid} - {msg}")
             print(f"Update DataFrame: failed for PID: {pid}")
             return df
@@ -808,8 +876,8 @@ def add_update_dataframe(df: pd.DataFrame, pid: str, row_data):
             return updated_df
     else:
         logger.info(f"Adding to Dataframe: {pid}")
-        updated_df,success,msg = add_row_to_dataframe(df,row_data,key_column=id_column)
-        if not (success):
+        updated_df, success, msg = add_row_to_dataframe(df, row_data, key_column=id_column)
+        if not success:
             logger.warning(f"Adding to DataFrame: Failed for PID: {pid} - {msg}")
             print(f"Added to DataFrame: Failed for PID: {pid}")
             return df
@@ -876,7 +944,7 @@ def get_taxonomy_terms(base_url, vocabulary, auth_token=None):
         response.raise_for_status()
     except requests.exceptions.HTTPError as errh:
         logger.error(f"get_taxonomy_terms - HTTP error: {errh}")
-        print(f"HTTP error: {errh}")    
+        print(f"HTTP error: {errh}")
     except requests.exceptions.ConnectionError as errc:
         logger.error(f"get_taxonomy_terms - Connection error: {errc}")
         print(f"Connection error: {errc}")
@@ -895,7 +963,7 @@ def get_taxonomy_terms(base_url, vocabulary, auth_token=None):
                 return None
         else:
             logger.error(f"get_taxonomy_terms - Error {response.status_code}: {response.text}")
-            
+
 def get_taxonomy_term_tid(base_url, vocabulary, term_name, auth_token=None):
     """
     Fetch taxonomy term ID (tid) from Drupal JSON:API given term name.
@@ -905,7 +973,7 @@ def get_taxonomy_term_tid(base_url, vocabulary, term_name, auth_token=None):
         vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
         term_name (str): Name of the taxonomy term to search.
         auth_token (str): Optional Bearer token for authentication.
-        
+
     Returns:
         str or None: The taxonomy term ID if found, else None.
     """
@@ -921,7 +989,7 @@ def get_taxonomy_term_tid(base_url, vocabulary, term_name, auth_token=None):
             return term["attributes"]["drupal_internal__tid"]
     # Only return None if no matching term is found.
     return None
-    
+
 def get_taxonomy_term_name(base_url, vocabulary, tid, auth_token=None):
     """
     Fetch taxonomy term name from Drupal JSON:API given term ID (tid).
@@ -931,7 +999,7 @@ def get_taxonomy_term_name(base_url, vocabulary, tid, auth_token=None):
         vocabulary (str): Machine name of the vocabulary (e.g., 'tags').
         tid (str): Taxonomy term ID to search.
         auth_token (str): Optional Bearer token for authentication.
-        
+
     Returns:
         str or None: The taxonomy term name if found, else None.
     """
@@ -1007,7 +1075,7 @@ def get_taxonomy_tid(base_url, vocabulary, term_name, auth_token=None):
         response.raise_for_status()
     except requests.exceptions.HTTPError as errh:
         logger.error(f"get_taxonomy_tid - HTTP error: {errh}")
-        print(f"HTTP error: {errh}")    
+        print(f"HTTP error: {errh}")
     except requests.exceptions.ConnectionError as errc:
         logger.error(f"get_taxonomy_tid - Connection error: {errc}")
         print(f"Connection error: {errc}")
@@ -1048,22 +1116,28 @@ def process_file(df: pd.DataFrame, file_path: str, level):
 
         file_folder = os.path.dirname(file_path)        # The Full Path including Directory containing the file.
         base_name = os.path.basename(file_path)         # The Base filename with extension of the file give the file_path.
-        file_name,file_ext = os.path.splitext(base_name)# The Separated Filename and Extension of the Base filename.
+        file_name, file_ext = os.path.splitext(base_name)# The Separated Filename and Extension of the Base filename.
 
-        # Set the file weight only if the file_name ends with a dash followed
-        # by four digits (e.g. "page-0003" ->). A purely numeric file_name
-        # (e.g. a barcode) is an identifier, not a weight.
+        # Set the file weight from the file_name in one of two cases:
+        #   1. The name ends with a dash followed by four digits, at any level
+        #      (e.g. "page-0003" -> 3).
+        #   2. The name is exactly four digits AND the file is inside a folder
+        #      (level >= 2), e.g. ".../202202-Kane-TMT-0001/0002.jp2" -> 2.
+        # Any other numeric name (e.g. a barcode, or a bare number directly in
+        # the scan directory) is an identifier, not a weight.
         file_weight = ''
         if level >= 1:
             pattern = r'.*-(\d{4})$'
-            match = re.search(pattern,file_name)
+            match = re.search(pattern, file_name)
             if match:
                 file_weight = int(match.group(1))
+            elif level >= 2 and re.fullmatch(r'\d{4}', file_name):
+                file_weight = int(file_name)
 
         # Set parent information.
-        parent_path   = os.path.dirname(file_path)
+        parent_path = os.path.dirname(file_path)
         parent_folder = os.path.basename(parent_path)
-        
+
         # Get model details from the map.
         imodel, field_model, resource_type = get_model_details(level)
 
@@ -1091,23 +1165,23 @@ def process_file(df: pd.DataFrame, file_path: str, level):
 
 
         # Process any .tif files.
-        if (file_ext.lower() == ".tif"):
+        if file_ext.lower() == ".tif":
             logger.info("File is type: TIFF")
 
             # Create .jp2 file from .tif and set .jp2 file as the file.
             # Override pid, file_path to point to jp2 file.
-            pid,file_path = process_tiff(file_path,level)
+            pid, file_path = process_tiff(file_path, level)
 
             # Override Row Data.
             row_data[id_column] = pid
             row_data['file'] = file_path
 
         # Process any .jp2 files.
-        elif (file_ext.lower() == ".jp2"):
+        elif file_ext.lower() == ".jp2":
             logger.info(f"File is type: JP2")
 
         # Process any audio files.
-        elif (file_ext.lower() == ".mp3"):
+        elif file_ext.lower() == ".mp3":
             logger.info(f"File is type: Audio")
 
         # Process any video files.
@@ -1126,13 +1200,13 @@ def process_file(df: pd.DataFrame, file_path: str, level):
             }
 
         # Process any PDF files.
-        elif (file_ext.lower() == ".pdf"):
+        elif file_ext.lower() == ".pdf":
             logger.info(f"File is type: PDF")
 
         # Process any simple image files.
         elif (file_ext.lower() == ".png" or file_ext.lower() == ".jpg"):
             logger.info(f"File is type: Simple Image")
-        
+
         # Unrecognized file extension.
         else:
             logger.warning(f"File is type: Unknown")
@@ -1141,13 +1215,13 @@ def process_file(df: pd.DataFrame, file_path: str, level):
         # Check to see if we have row_data to write to the sheet.
         if row_data:
             logger.info(f"Row Data: {row_data}")
-            df = add_update_dataframe(df,pid,row_data)
+            df = add_update_dataframe(df, pid, row_data)
         else:
             logger.warning(f"Unrecognized File: {file_path}")
 
         print(f"\n")
 
-    return(df)
+    return df
 
 
 def get_directory(directory: str):
@@ -1187,9 +1261,9 @@ def process_objects(df: pd.DataFrame, directory: str, level):
     pid = os.path.basename(directory)
 
     # Set parent information.
-    parent_path   = os.path.dirname(directory)
+    parent_path = os.path.dirname(directory)
     parent_folder = os.path.basename(parent_path)
-    
+
     # Get model details from the map.
     imodel, field_model, resource_type = get_model_details(level)
 
@@ -1204,7 +1278,7 @@ def process_objects(df: pd.DataFrame, directory: str, level):
             'field_model': imodel,
             'field_resource_type': resource_type,
         }
-        df = add_update_dataframe(df,pid,row_data)
+        df = add_update_dataframe(df, pid, row_data)
 
     if level == 1:
         row_data = {
@@ -1214,7 +1288,7 @@ def process_objects(df: pd.DataFrame, directory: str, level):
             'field_model': imodel,
             'field_resource_type': resource_type,
         }
-        df = add_update_dataframe(df,pid,row_data)
+        df = add_update_dataframe(df, pid, row_data)
 
     # For each object in the directory do.
     for row, (file_name, file_type, file_path) in enumerate(data, start=2):
@@ -1264,7 +1338,7 @@ def get_model_paths(start_model: str, models_dict: dict):
     return [[model] + path for path in child_paths]
 
 
-def get_model_info(model: str,models_dict: dict):
+def get_model_info(model: str, models_dict: dict):
     """
     Look up a model's configuration entry from the models dictionary.
 
@@ -1285,7 +1359,7 @@ def get_model_info(model: str,models_dict: dict):
     model_info = models_dict[model]
     return model_info
 
-def get_model(level:int):
+def get_model(level: int):
     """
     Resolve the model name for a given depth in the object hierarchy.
 
@@ -1322,7 +1396,7 @@ def get_model_details(level):
     model_info = get_model_info(my_model, models)
     resource_type = model_info.get('resource_type', 'None')
     imodel = model_info.get('imodel', 'None')
-    
+
     field_model = imodel_tid_map.get(imodel)
     if field_model is None:
         logger.warning(f"get_model_details - No taxonomy tid found for imodel '{imodel}'")
@@ -1360,7 +1434,7 @@ def write_df_to_excel(df: pd.DataFrame, filepath: str, sheet_name: str = "Sheet1
         logger.info(f"DataFrame successfully written to {filepath}")
     except Exception as e:
         logger.error(f"Error writing Excel file: {e}")
-        
+
 def write_df_to_csv(df: pd.DataFrame, filepath: str):
     """
     Write a pandas DataFrame to a CSV file.
@@ -1388,13 +1462,22 @@ def main():
         N/a
     """
 
+    # Module-level names that main() assigns and other functions read.
+    # Declared here so static analysers (Pylance/pylint) can see them.
+    # pylint: disable=global-statement
+    global models, allowed_models, log_formatter, args, cfg
+    global google_credentials, google_sheet_id, google_sheet_name
+    global log_file, skip, islandora_base_url, id_column
+    global required_columns, logger, model, model_paths
+    global imodel_tid_map, top
+
     # Build models list which produces a map based upon the model.
     # Model should eventually arive at a "File" model.
     # The 'model' is obtained from the list of models in Islandora 2.
     # All 'model' should be referenced below as a possible type.
     # The 'resource_type' is obtained from the list of resource types in Islandora 2.
     # The 'child' points to another model with "File" model being the end.
-    globals()['models'] = {
+    models = {
         'Compound Audio': {
             'model': 'Compound Object',
             'imodel': 'Compound Object',
@@ -1542,7 +1625,7 @@ def main():
 
     # Valid models.
     # This is the list of valid models that we will work with.
-    globals()['allowed_models'] = [
+    allowed_models = [
         "compound audio",
         "compound video",
         "compound image",
@@ -1571,47 +1654,47 @@ def main():
         sys.exit(1)
 
     # Setup the log file format.
-    globals()['log_formatter'] = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',datefmt="%Y%m%d %H:%M:%S")
+    log_formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d %(levelname)s %(message)s', datefmt="%Y%m%d %H:%M:%S")
 
     # Parse command line arguements.
-    globals()['args'] = parse_arguments()
+    args = parse_arguments()
 
     # Obtain the user running the script.
     username = get_username()
 
     # Get the configuration file contents.
-    globals()['cfg'] = read_yaml_file(args.config_file)
+    cfg = read_yaml_file(args.config_file)
 
     # Set Google variables from config file.
-    globals()['google_credentials']  = cfg['google_credentials_file']
-    globals()['google_sheet_id']     = cfg['google_sheet_id']
-    globals()['google_sheet_name']   = cfg['google_sheet_name']
-    globals()['log_file']            = cfg['log_file']
-    globals()['skip']                = cfg['skip'].split(",")
-    globals()['islandora_base_url']  = cfg['islandora_base_url']
-    globals()['id_column']           = cfg.get('id_column', 'id')
+    google_credentials = cfg['google_credentials_file']
+    google_sheet_id = cfg['google_sheet_id']
+    google_sheet_name = cfg['google_sheet_name']
+    log_file = cfg['log_file']
+    skip = cfg['skip'].split(",")
+    islandora_base_url = cfg['islandora_base_url']
+    id_column = cfg.get('id_column', 'id')
 
     # Override config file variables with command line parameters.
     if args.in_gs_creds is not None:
-        globals()['google_credentials'] = args.in_gs_creds
+        google_credentials = args.in_gs_creds
     if args.in_gs_id is not None:
-        globals()['google_sheet_id'] = args.in_gs_id
+        google_sheet_id = args.in_gs_id
     if args.in_gs_name is not None:
-        globals()['google_sheet_name'] = args.in_gs_name
+        google_sheet_name = args.in_gs_name
     if args.log_file is not None:
-        globals()['log_file'] = args.log_file
+        log_file = args.log_file
     if args.islandora_base_url is not None:
-        globals()['islandora_base_url'] = args.islandora_base_url
+        islandora_base_url = args.islandora_base_url
     if args.id_column is not None:
-        globals()['id_column'] = args.id_column
+        id_column = args.id_column
 
     # Required Sheet Columns:
-    globals()['required_columns'] = [id_column,"file","level","parent_id",
-        "field_weight","field_model","model","field_resource_type","transcript"]
+    required_columns = [id_column, "file", "level", "parent_id",
+        "field_weight", "field_model", "model", "field_resource_type", "transcript"]
 
     # Create the Log file.
     print(f"Creating Log file: {log_file}")
-    globals()['logger'] = setup_logger('logger', log_file, level=logging.DEBUG)
+    logger = setup_logger('logger', log_file, level=logging.DEBUG)
     logger.info(f"Begin log.")
     logger.info(f"Running User: {username}")
 
@@ -1624,15 +1707,15 @@ def main():
     logger.info(f"Islandora Base URL: {islandora_base_url}")
 
     # Get Batch Model.
-    globals()['model'] = args.model
+    model = args.model
     logger.info(f"Batch Model: {model}")
-    if not (model.lower() in allowed_models):
+    if model.lower() not in allowed_models:
         logger.error(f"Model: {model} is not in the list of allowed_models.")
         print(f"Model: {model} is not in the list of allowed_models.")
         sys.exit(1)
 
     # Show Model path.
-    globals()['model_paths'] = get_model_paths(model,models)
+    model_paths = get_model_paths(model, models)
     logger.info(f"Model Path: {model_paths[0]}")
     print(f"Model Path: {model_paths[0]}")
 
@@ -1652,7 +1735,7 @@ def main():
     logger.info(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     print(f"Reading Google Sheet: {google_sheet_id},{google_sheet_name}")
     df = read_google_sheet(google_sheet_id, google_sheet_name, google_credentials)
-    
+
     # Check that the service account can actually write to this sheet before
     # doing all the work of scanning the directory.
     can_edit, blocking, msg = check_sheet_protections(google_sheet_id, google_credentials)
@@ -1663,7 +1746,7 @@ def main():
             print(f"  - Sheet '{p['sheet']}': {p['description'] or '(no description)'} — range: {p['range']}")
         print("Contact the spreadsheet owner to remove protection or add the service account as an editor.")
         sys.exit(1)
-    
+
     # Fail fast if the sheet could not be read, rather than crashing later
     # with an unhelpful AttributeError on a None DataFrame.
     if df is None:
@@ -1673,7 +1756,7 @@ def main():
 
     # Ensure all required_columns exist.
     for col in required_columns:
-        df = add_column(df,col)
+        df = add_column(df, col)
 
     dupe_cols = df.columns[df.columns.duplicated()].tolist()
     if dupe_cols:
@@ -1684,26 +1767,26 @@ def main():
     # Fetch taxonomy terms once and cache as a name->tid dict.
     logger.info(f"Fetching Islandora Models taxonomy terms.")
     print(f"Fetching Islandora Models taxonomy terms.")
-    globals()['imodel_tid_map'] = get_taxonomy_terms_dict(
+    imodel_tid_map = get_taxonomy_terms_dict(
         islandora_base_url, 'islandora_models'
     )
     logger.info(f"Cached {len(imodel_tid_map)} taxonomy terms.")
-    
+
     # Check if the taxonomy terms were successfully fetched.
     if not imodel_tid_map:
         logger.error("Failed to fetch taxonomy terms - field_model values will be empty for this run.")
         print("Warning: Failed to fetch taxonomy terms. Continuing, but field_model will be blank.")
 
     # Process the contents.
-    globals()['top'] = args.directory
+    top = args.directory
     logger.info(f"Process the directory: {top}")
-    updated_df = process_objects(df,top,0)
+    updated_df = process_objects(df, top, 0)
 
-    # Save the DataFrame to Google Sheets.
+    # Save the script-managed columns to Google Sheets.
     logger.info(f"Updating Google Sheet with DataFrame.")
     print(f"Updating Google Sheet with DataFrame.")
-    success,msg = update_google_sheet(updated_df, google_sheet_id, google_sheet_name, google_credentials)
-    if (success):
+    success, msg = update_google_sheet(updated_df, google_sheet_id, google_sheet_name, google_credentials)
+    if success:
         logger.info(f"Successfully Updated Google Sheet.")
         print(f"Successfully Updated Google Sheet.")
     else:
@@ -1713,9 +1796,9 @@ def main():
     # Write df to Excel file and CSV file.
     logger.info(f"Writing DataFrame to Excel and CSV files.")
     print(f"Writing DataFrame to Excel and CSV files.")
-    write_df_to_excel(updated_df,os.path.join(top, "manifest-sbd.xlsx"))
-    write_df_to_csv(updated_df,os.path.join(top, "manifest-sbd.csv"))
-    
+    write_df_to_excel(updated_df, os.path.join(top, "manifest-sbd.xlsx"))
+    write_df_to_csv(updated_df, os.path.join(top, "manifest-sbd.csv"))
+
     # Display df
     print(f"Dataframe:\n{updated_df}")
 
